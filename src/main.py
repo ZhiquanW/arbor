@@ -12,17 +12,17 @@ import tree_env
 import utils
 import random
 
-random.seed(11)
-np.random.seed(11)
+# random.seed(11)
+# np.random.seed(11)
 
 
 def exp_env():
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_env.PolyLineTreeEnv(
-            max_vertex_num=200,
+            max_vertex_num=2000,
             delta_dis_range=np.array([0.0, 0.4]),
             delta_rotate_range=np.array([-30, 30]),
-            new_branch_rot_range=np.array([-20, 20]),
+            new_branch_rot_range=np.array([-40, 40]),
             headless=True,
         )
     )

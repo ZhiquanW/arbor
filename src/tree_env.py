@@ -135,8 +135,6 @@ class PolyLineTreeEnv(BaseEnvTrait):
         # store the current rotation matrixs to self.curr_rot_mat for rendering
         curr_euler_degree = utils.euler_from_rot_mats(self.cur_rot_mats_h[awake_vertex_indices])
         curr_euler_degree = (curr_euler_degree % 360 + 180) % 360 - 180
-        print("awake_vertex_indices", awake_vertex_indices)
-        print("current_euler_degree", curr_euler_degree)
         # 1.4 perform the rotation via the rotation matrixs
         curr_up_dirs = self.cur_rot_mats_h[awake_vertex_indices] @ np.array([0, 1, 0])
         assert curr_up_dirs.shape == (
@@ -147,7 +145,6 @@ class PolyLineTreeEnv(BaseEnvTrait):
         # 2. update the vertices states
         # 2.1 update the position
         self.vertices_states_h[awake_vertex_indices, 1:4] += utils.unscale_by_range(move_dis_g, self.delta_dis_range[0], self.delta_dis_range[1]) * curr_up_dirs
-        print("self.vertices_staets", self.vertices_states_h[awake_vertex_indices, 1:4])
         # 2.2 update the rotation
         self.vertices_states_h[awake_vertex_indices, 4:7] = utils.scale_by_range(curr_euler_degree, -180, 180)
 
@@ -174,8 +171,6 @@ class PolyLineTreeEnv(BaseEnvTrait):
             rot_axes = np.cross(parent_up_dirs, parent_left_dir)
             assert rot_axes.shape == (num_child_vertices, 3), f"rot_axes.shape={rot_axes.shape} does not match ({num_child_vertices}, 3)"
             new_branch_rot_angle = np.random.uniform(self.new_branch_rot_range[0], self.new_branch_rot_range[1], size=num_child_vertices).reshape(num_child_vertices, -1)
-            print("new_branch_rot_angle", new_branch_rot_angle)
-            print("parent_rot", utils.euler_from_rot_mats(self.cur_rot_mats_h[grow_indices]))
             new_branch_rot_mat = utils.rot_mat_from_axis_angles(rot_axes, new_branch_rot_angle)
             assert new_branch_rot_angle.shape == (num_child_vertices, 1), f"new_branch_rot_angle.shape={new_branch_rot_angle.shape} does not match ({num_child_vertices}, 1)"
             new_branch_rot_mat = self.cur_rot_mats_h[grow_indices] @ utils.rot_mat_from_axis_angles(rot_axes, new_branch_rot_angle)
@@ -183,10 +178,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
             new_branch_euler_degree = utils.euler_from_rot_mats(new_branch_rot_mat)
             assert new_branch_euler_degree.shape == (num_child_vertices, 3), f"new_branch_euler_degree.shape={new_branch_euler_degree.shape} does not match ({num_child_vertices}, 3)"
             new_branch_euler_degree = (new_branch_euler_degree % 360 + 180) % 360 - 180
-            print("new_branch_euler_degree", new_branch_euler_degree)
-            print("num_child", num_child_vertices)
             self.vertices_states_h[child_vertices_indices, 4:7] = utils.scale_by_range(new_branch_euler_degree, -180, 180)
-            print(child_vertices_indices)
             self.vertices_born_step_hist[child_vertices_indices] = self.steps
 
         # 3. set vertices to sleep
@@ -203,7 +195,8 @@ class PolyLineTreeEnv(BaseEnvTrait):
         acts = np.random.uniform(-1, 1, self.action_dim)
         acts[:, (0, -2, -1)] += 1.0
         acts[:, (0, -2, -1)] /= 2.0
-        acts[:, -1] *= 0.01
+        acts[:, -2] = 0.9
+        acts[:, -1] = 0.0001
         return acts
 
     def destory(self):
@@ -213,7 +206,6 @@ class PolyLineTreeEnv(BaseEnvTrait):
     def __plot(self):
         if self.init_plot:
             self.ax1.clear()
-            print("self.vertices_states_hist.shape", self.vertices_states_hist.shape)
             print("self.steps", self.steps)
             print("self.num_vertex", self.num_vertex)
             for v_idx in range(self.num_vertex):
