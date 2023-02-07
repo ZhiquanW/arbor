@@ -20,8 +20,8 @@ if __name__ == "__main__":
         env=tree_env.PolyLineTreeEnv(
             max_grow_steps=20,
             max_bud_num=200,
-            init_dis=0.5,
-            delta_dis_range=np.array([0.0, 0.4]),
+            init_dis=5,
+            delta_dis_range=np.array([-0.1, 0.1]),
             delta_rotate_range=np.array([-10, 10]),
             new_branch_rot_range=np.array([-20, 20]),
             branch_prob_range=np.array([0.1, 0.5]),

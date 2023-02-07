@@ -37,6 +37,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
         assert init_dis > 0, "init_dis must be positive"
         self.init_dis = init_dis
         assert len(delta_dis_range) == 2
+        assert np.all(self.init_dis + delta_dis_range > 0)
         self.delta_dis_range = delta_dis_range
         assert len(delta_rotate_range) == 2
         assert delta_rotate_range[0] >= -180 and delta_rotate_range[1] <= 180
@@ -125,7 +126,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
         need to be reshaped to (num_buds , 6)
         (
             num_buds,
-            move_dis: (1) [0,1],
+            move_dis: (1) [-1,1],
             delta_rot: (3)[-1,1] from [delta_lower, delta_upper],
             branch_prob: (1),
             sleep_prob: (1)
@@ -151,11 +152,12 @@ class PolyLineTreeEnv(BaseEnvTrait):
         num_awake_buds = awake_bud_indices.shape[0]
         if num_awake_buds > 0:
             # check and extract different actions
-            # check the direction is normalized to [0,1]
-            move_dis_g = utils.unscale_by_range(
-                action_2d[awake_bud_indices, 0].reshape(-1, 1), self.delta_dis_range[0], self.delta_dis_range[1]
-            )
-            assert np.all(move_dis_g >= 0.0) and np.all(move_dis_g <= 1.0), "move_dis should be in the range of [0, 1]"
+            act_delta_move_dis_g = action_2d[awake_bud_indices, 0].reshape(-1, 1)
+            assert np.all(act_delta_move_dis_g >= -1.0) and np.all(
+                act_delta_move_dis_g <= 1.0
+            ), "act of delta move distance should be in the range of [-1, 1]"
+            delta_move_dis_g = utils.unscale_by_range(act_delta_move_dis_g, self.delta_dis_range[0], self.delta_dis_range[1])
+            move_dis_h = self.init_dis + delta_move_dis_g
             # check the rotation is normalized to [-1,1]
             delta_euler_normalized_g = action_2d[awake_bud_indices, 1:4]
             assert np.all(delta_euler_normalized_g >= -1.0) and np.all(
@@ -202,7 +204,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
 
             # 2. update the buds states
             # 2.1 update the position
-            self.buds_states_h[awake_bud_indices, 1:4] += move_dis_g * curr_up_dirs
+            self.buds_states_h[awake_bud_indices, 1:4] += move_dis_h * curr_up_dirs
             # 2.2 update the rotation
             self.buds_states_h[awake_bud_indices, 4:7] = utils.scale_by_range(curr_euler_degree, -180, 180)
 
@@ -302,9 +304,8 @@ class PolyLineTreeEnv(BaseEnvTrait):
             points_z = self.buds_states_hist[born_step : self.steps, v_idx, 3].squeeze()
             self.ax1.plot(points_x, points_z, points_y)
             self.ax1.set_aspect("equal", adjustable="box")
-            self.ax1.set_xlim(-2, 2)
-            self.ax1.set_ylim(-2, 2)
-            self.ax1.set_zlim(-0.5, np.max(points_y) * 0.1)  # type: ignore
+            z_limit = np.max(np.abs(points_y)) * 1.1
+            self.ax1.set_zlim(-0.5, z_limit)  # type: ignore
 
     def render(self):
         if self.f is None:
