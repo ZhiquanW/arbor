@@ -132,3 +132,4 @@ dmypy.json
 .history/
 .vscode/
 trainer_cache/
+*.jpg
