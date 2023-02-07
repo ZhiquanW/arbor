@@ -19,10 +19,12 @@ import random
 def exp_env():
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_env.PolyLineTreeEnv(
-            max_vertex_num=2000,
+            max_bud_num=500,
             delta_dis_range=np.array([0.0, 0.4]),
-            delta_rotate_range=np.array([-30, 30]),
+            delta_rotate_range=np.array([-20, 20]),
             new_branch_rot_range=np.array([-40, 40]),
+            branch_prob_range=np.array([0.7, 0.9]),
+            sleep_prob_range=np.array([0.0, 0.001]),
             headless=True,
         )
     )
@@ -30,7 +32,8 @@ def exp_env():
     o = env.reset()
     for _ in range(10):
         a = env.sample_action()
-        env.step(a)
+        o, r, d, _ = env.step(a)
+        print(o.shape)
     # env.destory()
     raw_env_g: tree_env.PolyLineTreeEnv = env.env  # type: ignore
     raw_env_g.final_plot()

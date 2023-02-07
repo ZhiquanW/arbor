@@ -19,7 +19,7 @@ np.random.seed(11)
 def exp_env():
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_env.PolyLineTreeEnv(
-            max_vertex_num=2000,
+            max_bud_num=2000,
             delta_dis_range=np.array([0.0, 0.4]),
             delta_rotate_range=np.array([-10, 10]),
             new_branch_rot_range=np.array([-20, 20]),
