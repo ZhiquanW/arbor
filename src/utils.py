@@ -44,7 +44,7 @@ def rot_mats_from_eulers(xyzs: np.ndarray) -> np.ndarray:
 def euler_from_rot_mats(rot_mats: np.ndarray) -> np.ndarray:
     assert rot_mats.shape[-2:] == (3, 3), f"rot_mats shape: {rot_mats.shape}"
     r = scipy.spatial.transform.Rotation.from_matrix(rot_mats)
-    return r.as_euler("xyz", degrees=True)
+    return (r.as_euler("xyz", degrees=True) % 360 + 180) % 360 - 180
 
 
 def rescale_by_range(values: np.ndarray, lower: float, upper: float, re_lower: float, re_upper: float) -> np.ndarray:
@@ -65,7 +65,7 @@ def rot_around_axis_by_angle(vec: np.ndarray, axis: np.ndarray, angle: float) ->
     angle: (1)
     """
     assert axis.shape[0] == 3
-    axis = axis / np.linalg.norm(axis)
+    axis = axis / np.linalg.norm(axis, axis=-1, keepdims=True)  # normalized may lead to error
     r = scipy.spatial.transform.Rotation.from_rotvec(axis * angle, degrees=True)
     return r.apply(vec)
 
@@ -75,6 +75,6 @@ def rot_mat_from_axis_angles(axes: np.ndarray, angles: np.ndarray) -> np.ndarray
     axis: (3)
     angle: (N,1)
     """
-    axes = axes / np.linalg.norm(axes)
+    axes = axes / np.linalg.norm(axes, axis=-1, keepdims=True)
     r = scipy.spatial.transform.Rotation.from_rotvec(axes * angles, degrees=True)
     return r.as_matrix()

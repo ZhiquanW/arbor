@@ -3,7 +3,6 @@ import os, sys
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/src/")
-
 # fundamental imports
 import numpy as np
 import torch
@@ -53,40 +52,46 @@ class MLP(nn.Module):
         return out
 
 
-if __name__ == "__main__":
+def make_env(headless=True):
+    grow_steps = 15
     max_bud_num = 200
+    num_growth_per_bud = 20
+    init_dis = 0.5
     delta_dis_range = np.array([0.0, 0.4])
     delta_rotate_range = np.array([-20, 20])
-    new_branch_rot_range = np.array([-40, 40])
+    init_branch_rot = 20
+    branch_rot_range = np.array([-5, 5])
     branch_prob_range = np.array([0.0, 1.0])
     sleep_prob_range = np.array([0.001, 1.0])
-    grow_steps = 15
+    matplot = True
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_env.PolyLineTreeEnv(
             max_grow_steps=grow_steps,
             max_bud_num=max_bud_num,
+            num_growth_per_bud=num_growth_per_bud,
+            init_dis=init_dis,
             delta_dis_range=delta_dis_range,
             delta_rotate_range=delta_rotate_range,
-            new_branch_rot_range=new_branch_rot_range,
+            init_branch_rot=init_branch_rot,
+            branch_rot_range=branch_rot_range,
             branch_prob_range=branch_prob_range,
             sleep_prob_range=sleep_prob_range,
-            headless=True,
+            matplot=matplot,
+            headless=headless,
         )
     )
+    return env
+
+
+if __name__ == "__main__":
+    env: base_env.BaseEnvTrait = make_env(True)
     policy = BasePPOPolicy(
         actor=GaussianActor(
-            net=mlp([*env.observation_dim, 256, 256, *env.action_dim], torch.nn.Tanh),
+            net=mlp([*env.observation_dim, 256, 256, *env.action_dim], torch.nn.ReLU),
             init_log_stds=-0.5 * torch.ones(env.action_dim),
         ),
-        critic=BaseCritic(net=mlp([*env.observation_dim, 256, 256, 1], torch.nn.Tanh)),
+        critic=BaseCritic(net=mlp([*env.observation_dim, 256, 256, 1], torch.nn.ReLU)),
     )
-    # policy = BasePPOPolicy(
-    #     actor=GaussianActor(
-    #         net=MLP(),
-    #         init_log_stds=-0.5 * torch.ones(env.action_dim),
-    #     ),
-    #     critic=BaseCritic(net=mlp([*env.observation_dim, 256, 256, 1], torch.nn.Tanh)),
-    # )
     steps_per_env = 1024
     num_batches_per_env = 4
     learning_iterations = 32
@@ -97,6 +102,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam
     desired_kl = None
     epochs = 200
+    clip_ratio = 0.05
     trainer = NativePPOTrainer(
         env=env,
         policy=policy,
@@ -107,6 +113,7 @@ if __name__ == "__main__":
         val_loss_coef=val_loss_coef,
         init_lr=init_lr,
         desired_kl=desired_kl,
+        clip_ratio=clip_ratio,
         random_sampler=random_sampler,
         normalize_adv=normalize_adv,
         enable_tensorboard=True,
@@ -119,52 +126,10 @@ if __name__ == "__main__":
 
     train_batch = 20
     sub_steps = int(epochs // train_batch)
-    trainer.evaluate(
-        1,
-        env=rlvortex.envs.base_env.EnvWrapper(
-            env=tree_env.PolyLineTreeEnv(
-                max_grow_steps=grow_steps,
-                max_bud_num=max_bud_num,
-                delta_dis_range=delta_dis_range,
-                delta_rotate_range=delta_rotate_range,
-                new_branch_rot_range=new_branch_rot_range,
-                branch_prob_range=branch_prob_range,
-                sleep_prob_range=sleep_prob_range,
-                headless=False,
-            )
-        ),
-    )
+    trainer.evaluate(1, make_env(False))
     print("start training")
     for _ in range(train_batch):
         trainer.train(sub_steps)
-        ep_rtn, ep_mean = trainer.evaluate(
-            1,
-            env=rlvortex.envs.base_env.EnvWrapper(
-                env=tree_env.PolyLineTreeEnv(
-                    max_grow_steps=grow_steps,
-                    max_bud_num=max_bud_num,
-                    delta_dis_range=delta_dis_range,
-                    delta_rotate_range=delta_rotate_range,
-                    new_branch_rot_range=new_branch_rot_range,
-                    branch_prob_range=branch_prob_range,
-                    sleep_prob_range=sleep_prob_range,
-                    headless=False,
-                )
-            ),
-        )
+        ep_rtn, ep_mean = trainer.evaluate(1, env=make_env(True))
         print("ep_rtn:", ep_rtn, "ep_mean:", ep_mean)
-    trainer.evaluate(
-        -1,
-        env=rlvortex.envs.base_env.EnvWrapper(
-            env=tree_env.PolyLineTreeEnv(
-                max_grow_steps=grow_steps,
-                max_bud_num=max_bud_num,
-                delta_dis_range=delta_dis_range,
-                delta_rotate_range=delta_rotate_range,
-                new_branch_rot_range=new_branch_rot_range,
-                branch_prob_range=np.array([0.7, 0.9]),
-                sleep_prob_range=np.array([0.0, 0.001]),
-                headless=False,
-            )
-        ),
-    )
+    trainer.evaluate(-1, env=make_env(False))

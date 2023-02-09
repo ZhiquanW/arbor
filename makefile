@@ -1,3 +1,5 @@
+# create conda environment as 
+# conda create -n arbor python=3.9
 env:
 	pip install -r requirements.txt
 test:

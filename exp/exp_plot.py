@@ -20,15 +20,16 @@ if __name__ == "__main__":
         env=tree_env.PolyLineTreeEnv(
             max_grow_steps=20,
             max_bud_num=200,
-            init_dis=5,
-            delta_dis_range=np.array([-0.1, 0.1]),
-            delta_rotate_range=np.array([-0.1, 0.1]),
-            init_branch_rot=50,
-            branch_rot_range=np.array([-1, 1]),
+            num_growth_per_bud=20,
+            init_dis=0.5,
+            delta_dis_range=np.array([-0.1, 1.0]),
+            delta_rotate_range=np.array([-10, 10]),
+            init_branch_rot=30,
+            branch_rot_range=np.array([-10, 10]),
             branch_prob_range=np.array([0.1, 0.5]),
             sleep_prob_range=np.array([0.001, 0.01]),
             matplot=True,
-            headless=True,
+            headless=False,
         )
     )
     env.awake()
@@ -36,6 +37,7 @@ if __name__ == "__main__":
     for _ in range(1000):
         a = env.sample_action()
         o, r, d, _ = env.step(a)
+        env.render()
         if d:
             break
     # env.destory()
