@@ -1,4 +1,5 @@
 # buit-in import
+import io
 import os
 from typing import List, Optional
 from time import gmtime, strftime
@@ -9,7 +10,9 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import pylab
+from PIL import Image
 from rlvortex.envs.base_env import BaseEnvTrait, EnvWrapper
+import tqdm
 
 # project package import
 import utils
@@ -18,11 +21,10 @@ import utils
 class PolyLineTreeEnv(BaseEnvTrait):
     def __init__(
         self,
-        *,
-        max_grow_steps: int = 20,
+        max_grow_steps: int,
         max_bud_num: int,
         num_growth_per_bud: int,
-        init_dis: float = 0.5,
+        init_dis: float,
         delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
         delta_rotate_range: np.ndarray[int, np.dtype[np.float64]],
         init_branch_rot: float,
@@ -62,9 +64,10 @@ class PolyLineTreeEnv(BaseEnvTrait):
         # render variables
         self.matplot: bool = matplot
         self.headless = headless
-        if self.headless:
+        if self.matplot and self.headless:
             matplotlib.use("Agg")
         self.render_path = render_path
+        self.f = None
         if self.matplot:
             self.f = plt.figure()
             self.ax1 = plt.axes(projection="3d")
@@ -335,16 +338,18 @@ class PolyLineTreeEnv(BaseEnvTrait):
         return acts.flatten()
 
     def destory(self):
-        if self.renderable:
+        if self.f is not None:
             plt.close(self.f)
 
-    def __plot(self):
+    def __plot(self, step: Optional[int] = None, max_steps: Optional[int] = None):
         assert self.f is not None, "self.f is None, the environment is not renderable"
         assert self.ax1 is not None, "self.ax1 is None, the environment is not renderable"
-        matplotlib.rcParams["axes.linewidth"] = 0.1  # set the value globally
+        # matplotlib.rcParams["axes.linewidth"] = 0.1  # set the value globally
         self.ax1.clear()
-        delta_angle = 180 / self.max_grow_steps
-        self.ax1.view_init(10, self.steps * delta_angle, 0)
+        current_step = self.steps if step is None else step
+        max_steps = self.max_grow_steps if max_steps else max_steps
+        delta_angle = 360 / self.max_grow_steps
+        self.ax1.view_init(10, current_step * delta_angle, 0)
 
         for v_idx in range(self.num_bud):
             born_step = int(self.buds_born_step_hist[v_idx])
@@ -355,28 +360,47 @@ class PolyLineTreeEnv(BaseEnvTrait):
             self.ax1.spines["bottom"].set_linewidth(0.1)
             self.ax1.spines["left"].set_linewidth(0.1)
             self.ax1.spines["right"].set_linewidth(0.1)
+            self.ax1.axis("off")
             self.ax1.plot(points_x, points_z, points_y, "-o", markersize=2)
             self.ax1.set_aspect("equal", adjustable="box")
             z_limit = np.max(np.abs(points_y)) * 1.1
-            # self.ax1.set_zlim(-0.5, z_limit)  # type: ignore
+            self.ax1.set_zlim(-0.5, z_limit)  # type: ignore
 
     def render(self):
-        if self.f is None:
-            self.f = plt.figure(figsize=(100, 100))
-            self.ax1: plt.Axes = plt.axes(projection="3d")
         if self.renderable:
+            if self.f is None:
+                self.f = plt.figure()
+                self.ax1: plt.Axes = plt.axes(projection="3d")
             self.__plot()
             if not self.headless:
                 plt.pause(0.1)
 
-    def final_plot(
-        self,
-    ):
+    def final_plot(self, name: Optional[str] = None, num_frame: int = 1):
         if self.f is None:
             self.f = plt.figure()
             self.ax1: plt.Axes = plt.axes(projection="3d")
-        self.__plot()
-        if self.headless:
-            plt.savefig(os.path.join(self.render_path, "tree_" + strftime("%Y-%m-%d|%H:%M:%S", gmtime()) + ".jpg"))
+        fig_name = "tree_" + strftime("%Y-%m-%d|%H:%M:%S", gmtime()) if name is None else name
+        if num_frame == 1:
+            self.__plot()
+            if self.headless:
+                plt.savefig(os.path.join(self.render_path, fig_name + ".jpg"), dpi=512)
+            else:
+                plt.show()
         else:
-            plt.show()
+            matplotlib.use("macosx")
+            Image.MAX_IMAGE_PIXELS = 1000000000
+            frames = []
+            io_buf = io.BytesIO()
+
+            for i in tqdm.tqdm(range(num_frame)):
+                self.__plot(step=i, max_steps=num_frame)
+                self.f.savefig(io_buf, format="raw", dpi=100, bbox_inches=0)
+                io_buf.seek(0)
+                img_arr = np.reshape(
+                    np.frombuffer(io_buf.getvalue(), dtype=np.uint8),
+                    newshape=(self.f.canvas.get_width_height()[::-1] + (4,)),
+                )
+                frames.append(img_arr)
+            io_buf.close()
+            imgs = [Image.fromarray(frame) for frame in frames]
+            imgs[0].save(fig_name + ".gif", format="gif", save_all=True, append_images=imgs[1:], duration=16, loop=0)

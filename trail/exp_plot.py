@@ -28,7 +28,7 @@ if __name__ == "__main__":
             branch_rot_range=np.array([-10, 10]),
             branch_prob_range=np.array([0.1, 0.5]),
             sleep_prob_range=np.array([0.001, 0.01]),
-            matplot=True,
+            matplot=False,
             headless=False,
         )
     )
@@ -42,5 +42,5 @@ if __name__ == "__main__":
             break
     # env.destory()
     raw_env_g: tree_env.PolyLineTreeEnv = env.env  # type: ignore
-    raw_env_g.final_plot()
+    raw_env_g.final_plot(num_frame=600)
     # while True:
