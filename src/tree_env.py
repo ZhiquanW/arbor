@@ -4,6 +4,7 @@ import os
 from typing import List, Optional
 from time import gmtime, strftime
 import random
+from matplotlib import cm
 
 # third-party import
 import numpy as np
@@ -31,6 +32,8 @@ class PolyLineTreeEnv(BaseEnvTrait):
         branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
+        collision_space_interval: float,
+        collision_space_half_size: float,
         matplot: bool = True,
         headless: bool = True,
         render_path: str = os.getcwd(),  # the path to save the render result, used only when render and headless is True
@@ -56,6 +59,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.branch_prob_range = branch_prob_range
         assert len(sleep_prob_range) == 2
         self.sleep_prob_range = sleep_prob_range
+        assert collision_space_interval > 0.0
+        self.collision_space_interval = collision_space_interval
+        self.collision_space_half_size = collision_space_half_size
         # the angle between the new branch and the parent branch,
         # the init rotation of the new node is compute by rotating alpha degree around parent node x axis ([1,0,0] in local frame)
         self.branch_rot_range = branch_rot_range
@@ -70,7 +76,10 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.f = None
         if self.matplot:
             self.f = plt.figure()
-            self.ax1 = plt.axes(projection="3d")
+            self.tree_ax = self.f.add_subplot(121, projection="3d")  # subplot has 1 row 2 columns, it takes the first position
+            self.collision_ax = self.f.add_subplot(
+                122, projection="3d"
+            )  # subplot has 1 row 2 columns, it takes the second position
         # observation variables
         self.__set_init_variables()
         # reward variables
@@ -100,6 +109,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.buds_states_h[0, 8] = self.num_growth_per_bud
         self.buds_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_bud_num, self.num_feats))
         self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(np.int32)
+        self.collision_space: np.ndarray = np.zeros(
+            (2 * self.collision_space_half_size, 2 * self.collision_space_half_size, 2 * self.collision_space_half_size)
+        )
 
     # this method is called after the action is performed.
     def compute_step_info(self):
@@ -164,7 +176,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 True,
                 {"num_buds": self.num_bud, "mean_buds_height": self.buds_states_h[: self.num_bud, 2]},
             )
-        # active bud indices (1. not exists nodes 2. filter out sleeping nodes 3. no remaining growth chance)
+        # active bud indices by filtering out  (1. not exists nodes 2. sleeping nodes 3. no remaining growth chance)
         active_bud_indices = np.array(
             list(
                 filter(
@@ -310,6 +322,15 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 self.buds_born_step_hist[child_buds_indices] = self.steps
         # 5. record information into history
         self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[: self.num_bud]
+        # 6. compute collision occupy
+        all_exists_buds_indices = np.where(self.buds_states_hist[:, :, 0] == 1)  # get all exists buds' indices
+        occupied_voxel_indices = (
+            self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.collision_space_interval
+        ).astype(np.int32)
+        collision_indices = (
+            occupied_voxel_indices + np.array([self.collision_space_half_size, 0, self.collision_space_half_size])
+        ).transpose()
+        self.collision_space[tuple(collision_indices)] = 1
 
         # 6.Compute Rewards Functions
         # 6.1 compute the height reward by summizeing
@@ -343,42 +364,67 @@ class PolyLineTreeEnv(BaseEnvTrait):
 
     def __plot(self, step: Optional[int] = None, max_steps: Optional[int] = None):
         assert self.f is not None, "self.f is None, the environment is not renderable"
-        assert self.ax1 is not None, "self.ax1 is None, the environment is not renderable"
+        assert self.tree_ax is not None, "self.ax1 is None, the environment is not renderable"
         # matplotlib.rcParams["axes.linewidth"] = 0.1  # set the value globally
-        self.ax1.clear()
+        self.tree_ax.clear()
+        self.collision_ax.clear()
         current_step = self.steps if step is None else step
         max_steps = self.max_grow_steps if max_steps else max_steps
         delta_angle = 360 / self.max_grow_steps
-        self.ax1.view_init(10, current_step * delta_angle, 0)
-
+        self.tree_ax.view_init(15, current_step * delta_angle, 0)
+        self.tree_ax.dist = 10
+        self.collision_ax.view_init(15, current_step * delta_angle, 0)
+        self.collision_ax.dist = 10
+        # Option 1. plot collision space with 3d heatmap
+        # elements = (
+        #     np.arange(2 * self.collision_space_half_size) - self.collision_space_half_size
+        # ) * self.collision_space_interval
+        # xv, yv, zv = np.meshgrid(elements, elements + self.collision_space_half_size * self.collision_space_interval, elements)
+        # heats = self.collision_space.flatten()
+        # colors = cm.hsv(heats / max(heats))
+        # self.collision_ax.scatter(xv.flatten(), zv.flatten(), yv.flatten(), c=colors, s=4)
+        # Option 2. plot collision spacw with scatter
+        xv, yv, zv = np.where(self.collision_space > 0)
+        xv -= self.collision_space_half_size
+        zv -= self.collision_space_half_size
+        self.collision_ax.plot(xv, zv, yv, "o", markersize=2)
+        self.collision_ax.set_aspect("equal", adjustable="box")
+        z_limit = np.max(np.abs(yv)) * 1.1
+        self.collision_ax.set_zlim(-0.5, z_limit)  # type: ignore
+        #  plot tree buds and trajectory
+        tree_zlimit = 0
         for v_idx in range(self.num_bud):
             born_step = int(self.buds_born_step_hist[v_idx])
             points_x = self.buds_states_hist[born_step : self.steps + 1, v_idx, 1].squeeze()
             points_y = self.buds_states_hist[born_step : self.steps + 1, v_idx, 2].squeeze()
             points_z = self.buds_states_hist[born_step : self.steps + 1, v_idx, 3].squeeze()
-            self.ax1.spines["top"].set_linewidth(0.1)
-            self.ax1.spines["bottom"].set_linewidth(0.1)
-            self.ax1.spines["left"].set_linewidth(0.1)
-            self.ax1.spines["right"].set_linewidth(0.1)
-            self.ax1.axis("off")
-            self.ax1.plot(points_x, points_z, points_y, "-o", markersize=2)
-            self.ax1.set_aspect("equal", adjustable="box")
-            z_limit = np.max(np.abs(points_y)) * 1.1
-            self.ax1.set_zlim(-0.5, z_limit)  # type: ignore
+            self.tree_ax.spines["top"].set_linewidth(0.1)
+            self.tree_ax.spines["bottom"].set_linewidth(0.1)
+            self.tree_ax.spines["left"].set_linewidth(0.1)
+            self.tree_ax.spines["right"].set_linewidth(0.1)
+            # self.tree_ax.axis("off")
+            self.tree_ax.plot(points_x, points_z, points_y, "-o", markersize=2)
+            self.tree_ax.set_aspect("equal", adjustable="box")
+            tree_zlimit = max(tree_zlimit, np.max(np.abs(points_y)) * 1.1)
+            self.tree_ax.set_zlim(-0.5, tree_zlimit)  # type: ignore
 
     def render(self):
         if self.renderable:
             if self.f is None:
                 self.f = plt.figure()
-                self.ax1: plt.Axes = plt.axes(projection="3d")
+                self.tree_ax: plt.Axes = plt.axes(projection="3d")
             self.__plot()
             if not self.headless:
                 plt.pause(0.1)
 
-    def final_plot(self, name: Optional[str] = None, num_frame: int = 1):
+    def final_plot(self, interactive: bool = True, name: Optional[str] = None, num_frame: int = 1):
         if self.f is None:
             self.f = plt.figure()
-            self.ax1: plt.Axes = plt.axes(projection="3d")
+            self.tree_ax: plt.Axes = plt.axes(projection="3d")
+        if interactive:
+            self.__plot()
+            plt.show()
+            return
         fig_name = "tree_" + strftime("%Y-%m-%d|%H:%M:%S", gmtime()) if name is None else name
         if num_frame == 1:
             self.__plot()

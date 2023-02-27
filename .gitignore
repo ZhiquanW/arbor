@@ -133,3 +133,5 @@ dmypy.json
 .vscode/
 trainer_cache/
 *.jpg
+.DS_Store
+*.gif

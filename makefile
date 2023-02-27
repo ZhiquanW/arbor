@@ -8,3 +8,5 @@ exp:
 	python tests/exp.py
 easy:
 	python src/main.py
+test-collision:
+	python trail/exp_collision.py
