@@ -8,5 +8,9 @@ exp:
 	python tests/exp.py
 easy:
 	python src/main.py
-test-collision:
+trail-collision:
 	python trail/exp_collision.py
+trail-core:
+	python trail/trail_core.py
+trail-pc_tree:
+	python trail/trail_pc_tree_env.py

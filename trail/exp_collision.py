@@ -44,21 +44,6 @@ def collision_occupy():
 
 if __name__ == "__main__":
     # collision_occupy()
-    # print("np trail")
-    # a = np.zeros((3, 4, 5))
-    # a[0, 1:3, 0] = 1
-    # a[1, 0:2, 0] = 1
-    # a[2, 3, 0] = 1
-    # print(a)
-    # idx = np.where(a[:, :, 0] > 0)
-    # print(idx)
-    # print(a[idx])
-    # print(a[idx][:, 0])
-    # a[:, :, 0][idx] = -1
-    # print("*" * 20)
-    # print(a[idx][:, 1:4])
-    # print("*" * 20)
-    # print(a)
 
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_env.PolyLineTreeEnv(
@@ -72,8 +57,8 @@ if __name__ == "__main__":
             branch_rot_range=np.array([-10, 10]),
             branch_prob_range=np.array([0.1, 0.5]),
             sleep_prob_range=np.array([0.001, 0.01]),
-            collision_space_interval=0.2,
-            collision_space_half_size=100,
+            collision_space_interval=0.01,
+            collision_space_half_size=500,
             matplot=True,
             headless=False,
         )

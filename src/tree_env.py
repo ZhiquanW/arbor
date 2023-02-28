@@ -33,7 +33,7 @@ class PolyLineTreeEnv(BaseEnvTrait):
         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
         collision_space_interval: float,
-        collision_space_half_size: float,
+        collision_space_half_size: int,
         matplot: bool = True,
         headless: bool = True,
         render_path: str = os.getcwd(),  # the path to save the render result, used only when render and headless is True
@@ -299,7 +299,6 @@ class PolyLineTreeEnv(BaseEnvTrait):
                     num_child_buds,
                     1,
                 ), f"new_branch_rot_angle.shape={new_branch_rot_degree.shape} does not match ({num_child_buds}, 1)"
-                db_rot_mat = utils.rot_mat_from_axis_angles(rot_axes, new_branch_rot_degree)
                 new_branch_rot_mat = self.cur_rot_mats_h[grow_indices] @ utils.rot_mat_from_axis_angles(
                     rot_axes, new_branch_rot_degree
                 )
@@ -371,10 +370,10 @@ class PolyLineTreeEnv(BaseEnvTrait):
         current_step = self.steps if step is None else step
         max_steps = self.max_grow_steps if max_steps else max_steps
         delta_angle = 360 / self.max_grow_steps
-        self.tree_ax.view_init(15, current_step * delta_angle, 0)
-        self.tree_ax.dist = 10
-        self.collision_ax.view_init(15, current_step * delta_angle, 0)
-        self.collision_ax.dist = 10
+        self.tree_ax.view_init(15, current_step * delta_angle, 0)  # type: ignore
+        self.tree_ax.dist = 10  # type: ignore
+        self.collision_ax.view_init(15, current_step * delta_angle, 0)  # type: ignore
+        self.collision_ax.dist = 10  # type: ignore
         # Option 1. plot collision space with 3d heatmap
         # elements = (
         #     np.arange(2 * self.collision_space_half_size) - self.collision_space_half_size
