@@ -43,8 +43,9 @@ class ArborEngine:
         assert np.all(self.init_dis + delta_dis_range > 0)
         # the range of the delta distance of init_dis
         self.delta_dis_range = delta_dis_range
-        assert len(delta_rotate_range) == 2
-        assert delta_rotate_range[0] >= -180 and delta_rotate_range[1] <= 180
+        assert delta_rotate_range.shape == (3,2)
+        assert (delta_dis_range >= -180).all()
+        assert (delta_dis_range <= 180).all()
         # the rotation angle (in degree) range (in x,y,z dimension separately) when a bud grow
         self.delta_rotate_range = delta_rotate_range
         assert init_branch_rot > 0 and init_branch_rot < 180
@@ -153,7 +154,6 @@ class ArborEngine:
             )
         ).astype(np.int32)
         num_active_buds = active_bud_indices.shape[0]
-        delta_euler_normalized_g = 0  # pre-define for reward computing
         # 3. active buds perform actions
         if num_active_buds <= 0:
             self.done = True
@@ -174,8 +174,8 @@ class ArborEngine:
         ), "delta_euler should be in the range of [-1, 1]"
 
         # 0.3 unscale degree to [-180, 180] in degrees
-        delta_euler_degree = utils.unscale_by_range(
-            delta_euler_normalized_g, self.delta_rotate_range[0], self.delta_rotate_range[1]
+        delta_euler_degrees = utils.unscale_by_ranges(
+            delta_euler_normalized_g, self.delta_rotate_range[:,0], self.delta_rotate_range[:,1]
         )
 
         # 0.4 check the branch prob is normalized to [0,1]
@@ -185,7 +185,7 @@ class ArborEngine:
         assert np.all(branch_probs_g >= 0.0) and np.all(branch_probs_g <= 1.0), "branch_prob should be in the range of [0, 1]"
 
         # 1. prepare move distance & rotation parameters
-        self.buds_grow(active_bud_indices, delta_move_dis_h, delta_euler_degree)
+        self.buds_grow(active_bud_indices, delta_move_dis_h, delta_euler_degrees)
 
         # 2.4. set buds to sleep
         # the num_awake_buds is the number of buds that are awake before growing new branches

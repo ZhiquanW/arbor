@@ -14,7 +14,7 @@ if __name__ == "__main__":
         num_growth_per_bud=20,
         init_dis=0.5,
         delta_dis_range=np.array([-0.1, 1.0]),
-        delta_rotate_range=np.array([-10, 10]),
+        delta_rotate_range=np.array([[-10, 10], [-20, 20], [-10, 10]]),
         init_branch_rot=30,
         branch_rot_range=np.array([-10, 10]),
         branch_prob_range=np.array([0.1, 0.5]),
@@ -25,7 +25,6 @@ if __name__ == "__main__":
     for _ in range(100):
         a = arbor_engine.sample_action()
         done = arbor_engine.step(a)
-        print(done)
         if done:
             break
     f = plt.figure()
