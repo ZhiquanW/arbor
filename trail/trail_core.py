@@ -26,10 +26,10 @@ if __name__ == "__main__":
         a = arbor_engine.sample_action()
         done = arbor_engine.step(a)
         if done:
-            break
-    f = plt.figure()
-    tree_ax = f.add_subplot(121, projection="3d")
-    col_ax = f.add_subplot(122, projection="3d")
-    arbor_engine.matplot_tree(tree_ax)
-    arbor_engine.matplot_collision(col_ax)
-    plt.show()
+            f = plt.figure()
+            tree_ax = f.add_subplot(121, projection="3d")
+            col_ax = f.add_subplot(122, projection="3d")
+            arbor_engine.matplot_tree(tree_ax)
+            arbor_engine.matplot_collision(col_ax)
+            plt.show()
+            arbor_engine.reset()

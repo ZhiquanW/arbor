@@ -348,18 +348,14 @@ class ArborEngine:
             points_x = self.buds_states_hist[born_step : self.steps + 1, v_idx, 1].squeeze()
             points_y = self.buds_states_hist[born_step : self.steps + 1, v_idx, 2].squeeze()
             points_z = self.buds_states_hist[born_step : self.steps + 1, v_idx, 3].squeeze()
-            plt_axes.spines["top"].set_linewidth(0.1)
-            plt_axes.spines["bottom"].set_linewidth(0.1)
-            plt_axes.spines["left"].set_linewidth(0.1)
-            plt_axes.spines["right"].set_linewidth(0.1)
-            # plot_axes.axis("off")
             plt_axes.plot(points_x, points_z, points_y, "-o", markersize=2)
-            plt_axes.set_aspect("equal", adjustable="box")
             tree_zlimit = max(tree_zlimit, np.max(np.abs(points_y)) * 1.1)
-            plt_axes.set_zlim(-0.5, tree_zlimit)  # type: ignore
+        plt_axes.set_aspect("equal", adjustable="box")
+        plt_axes.set_zlim(-0.5, tree_zlimit)  # type: ignore
 
     def matplot_collision(self, plt_axes: axes.Axes) -> None:
         plt_axes.clear()
+        plt_axes.dist = 8  # type: ignore
         xv, yv, zv = np.where(self.collision_space > 0)
         col_vertices = (
             np.array([xv, yv, zv], dtype=np.float32)
@@ -367,3 +363,4 @@ class ArborEngine:
         ) * self.collision_space_interval
         plt_axes.plot(col_vertices[0, :], col_vertices[2, :], col_vertices[1, :], "o", markersize=2)
         plt_axes.set_aspect("equal", adjustable="box")
+        plt_axes.set_zlim(-0.5, np.max(col_vertices[1, :]))  # type: ignore
