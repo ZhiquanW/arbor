@@ -43,7 +43,7 @@ class ArborEngine:
         assert np.all(self.init_dis + delta_dis_range > 0)
         # the range of the delta distance of init_dis
         self.delta_dis_range = delta_dis_range
-        assert delta_rotate_range.shape == (3,2)
+        assert delta_rotate_range.shape == (3, 2)
         assert (delta_dis_range >= -180).all()
         assert (delta_dis_range <= 180).all()
         # the rotation angle (in degree) range (in x,y,z dimension separately) when a bud grow
@@ -104,9 +104,11 @@ class ArborEngine:
     @property
     def action_dim(self):
         return (self.max_bud_num * 6,)
+
     @property
     def observation_dim(self):
         return (self.max_bud_num * self.num_feats,)
+
     def reset(self):
         self.done = False
         self.steps = 0
@@ -131,8 +133,8 @@ class ArborEngine:
             )
         Returns: Bool if the modeling process is completed (all data will be stored in the member variables)
         """
-
-        assert not self.done , f"the modeling process is done, no further action can be performed"
+        ############################################## sanity check: input ##############################################
+        assert not self.done, f"the modeling process is done, no further action can be performed"
         assert action.shape == (
             self.max_bud_num * 6,
         ), f"action dimension is wrong, expect {self.max_bud_num * 6,}, got {action.shape}"
@@ -140,6 +142,7 @@ class ArborEngine:
         assert (
             action_2d.shape[0] == self.buds_states_h.shape[0]
         ), f"action dimension is wrong, expect {self.buds_states_h.shape[0]}, got {action_2d.shape[0]}"
+
         self.steps += 1
         if self.steps == self.max_grow_steps:
             self.done = True
@@ -154,11 +157,13 @@ class ArborEngine:
             )
         ).astype(np.int32)
         num_active_buds = active_bud_indices.shape[0]
-        # 3. active buds perform actions
+
+        ############################################## early stop: no active buds ##############################################
         if num_active_buds <= 0:
             self.done = True
             return True
 
+        ############################################## sanity check: action attributes ##############################################
         # 0. check incoming action parameters
         # 0.1 check delta move distance between [-1, 1]
         act_delta_move_dis_g = action_2d[active_bud_indices, 0].reshape(-1, 1)
@@ -175,7 +180,7 @@ class ArborEngine:
 
         # 0.3 unscale degree to [-180, 180] in degrees
         delta_euler_degrees = utils.unscale_by_ranges(
-            delta_euler_normalized_g, self.delta_rotate_range[:,0], self.delta_rotate_range[:,1]
+            delta_euler_normalized_g, self.delta_rotate_range[:, 0], self.delta_rotate_range[:, 1]
         )
 
         # 0.4 check the branch prob is normalized to [0,1]
@@ -184,9 +189,11 @@ class ArborEngine:
         )
         assert np.all(branch_probs_g >= 0.0) and np.all(branch_probs_g <= 1.0), "branch_prob should be in the range of [0, 1]"
 
+        ############################################## buds grow ##############################################
         # 1. prepare move distance & rotation parameters
         self.buds_grow(active_bud_indices, delta_move_dis_h, delta_euler_degrees)
 
+        ############################################## buds sleep ##############################################
         # 2.4. set buds to sleep
         # the num_awake_buds is the number of buds that are awake before growing new branches
         # check the sleep prob is normalized to [0,1]
@@ -197,6 +204,7 @@ class ArborEngine:
         sleep_indices = active_bud_indices[np.where(np.random.uniform(0, 1, num_active_buds) < sleep_probs_g)[0]]
         self.buds_sleep(sleep_indices)
 
+        ############################################## buds branch ##############################################
         # 2.5. grow new branch by sampling the prob
         # the indices of the buds that will grow new branches  from awake buds and the remaining number of growth > 0
         grow_indices = active_bud_indices[np.where(np.random.uniform(0, 1, num_active_buds) < branch_probs_g)[0]]
@@ -206,11 +214,14 @@ class ArborEngine:
         assert (
             len(grow_indices) == num_child_buds
         ), f"len(grow_indices)={len(grow_indices)} does not match num_child_buds={num_child_buds}"
+
+        ############################################## early stop: buds num max ##############################################
         # if num_bud is max, then no new branch will be grown
         if num_child_buds > 0 and self.num_bud <= self.max_bud_num:
             # grow new buds by setting it as exist, after all the existing buds
             child_buds_indices = np.arange(self.num_bud, self.num_bud + num_child_buds)
             self.buds_branch(grow_indices, child_buds_indices)
+
         # 5. record information into history
         self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[: self.num_bud]
         self.collision_detection()
@@ -312,7 +323,7 @@ class ArborEngine:
         # record the birthday of the new buds
         self.buds_born_step_hist[child_buds_indice] = self.steps
 
-    def collision_detection(self)->None:
+    def collision_detection(self) -> None:
         # 6. compute collision occupy
         all_exists_buds_indices = np.where(self.buds_states_hist[:, :, 0] == 1)  # get all exists buds' indices
         occupied_voxel_indices = (
@@ -321,31 +332,38 @@ class ArborEngine:
         collision_indices = (
             occupied_voxel_indices + np.array([self.collision_space_half_size, 0, self.collision_space_half_size])
         ).transpose()
-        collision_indices= np.clip(collision_indices,0, self.collision_space_half_size * 2-1)
+        collision_indices = np.clip(collision_indices, 0, self.collision_space_half_size * 2 - 1)
         self.collision_space[tuple(collision_indices)] = 1
-
-
 
     def sample_action(self) -> np.ndarray:
         acts = np.random.uniform(-1, 1, self.max_bud_num * 6).reshape(self.max_bud_num, -1)
         return acts.flatten()
 
-    def matplot(self, plot_axes: axes.Axes) -> None:
-        plot_axes.clear()
-        plot_axes.dist = 10  # type: ignore
+    def matplot_tree(self, plt_axes: axes.Axes) -> None:
+        plt_axes.clear()
+        plt_axes.dist = 8  # type: ignore
         tree_zlimit = 0
         for v_idx in range(self.num_bud):
             born_step = int(self.buds_born_step_hist[v_idx])
             points_x = self.buds_states_hist[born_step : self.steps + 1, v_idx, 1].squeeze()
             points_y = self.buds_states_hist[born_step : self.steps + 1, v_idx, 2].squeeze()
             points_z = self.buds_states_hist[born_step : self.steps + 1, v_idx, 3].squeeze()
-            plot_axes.spines["top"].set_linewidth(0.1)
-            plot_axes.spines["bottom"].set_linewidth(0.1)
-            plot_axes.spines["left"].set_linewidth(0.1)
-            plot_axes.spines["right"].set_linewidth(0.1)
+            plt_axes.spines["top"].set_linewidth(0.1)
+            plt_axes.spines["bottom"].set_linewidth(0.1)
+            plt_axes.spines["left"].set_linewidth(0.1)
+            plt_axes.spines["right"].set_linewidth(0.1)
             # plot_axes.axis("off")
-            plot_axes.plot(points_x, points_z, points_y, "-o", markersize=2)
-            plot_axes.set_aspect("equal", adjustable="box")
+            plt_axes.plot(points_x, points_z, points_y, "-o", markersize=2)
+            plt_axes.set_aspect("equal", adjustable="box")
             tree_zlimit = max(tree_zlimit, np.max(np.abs(points_y)) * 1.1)
-            plot_axes.set_zlim(-0.5, tree_zlimit)  # type: ignore
-    
+            plt_axes.set_zlim(-0.5, tree_zlimit)  # type: ignore
+
+    def matplot_collision(self, plt_axes: axes.Axes) -> None:
+        plt_axes.clear()
+        xv, yv, zv = np.where(self.collision_space > 0)
+        col_vertices = (
+            np.array([xv, yv, zv], dtype=np.float32)
+            - np.array([self.collision_space_half_size, 0, self.collision_space_half_size]).reshape(3, 1)
+        ) * self.collision_space_interval
+        plt_axes.plot(col_vertices[0, :], col_vertices[2, :], col_vertices[1, :], "o", markersize=2)
+        plt_axes.set_aspect("equal", adjustable="box")

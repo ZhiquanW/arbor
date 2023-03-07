@@ -19,8 +19,8 @@ if __name__ == "__main__":
         branch_rot_range=np.array([-10, 10]),
         branch_prob_range=np.array([0.1, 0.5]),
         sleep_prob_range=np.array([0.001, 0.01]),
-        collision_space_interval=0.01,
-        collision_space_half_size=500,
+        collision_space_interval=0.1,
+        collision_space_half_size=200,
     )
     for _ in range(100):
         a = arbor_engine.sample_action()
@@ -28,6 +28,8 @@ if __name__ == "__main__":
         if done:
             break
     f = plt.figure()
-    ax = plt.axes(projection="3d")
-    arbor_engine.matplot(ax)
+    tree_ax = f.add_subplot(121, projection="3d")
+    col_ax = f.add_subplot(122, projection="3d")
+    arbor_engine.matplot_tree(tree_ax)
+    arbor_engine.matplot_collision(col_ax)
     plt.show()
