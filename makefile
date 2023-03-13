@@ -12,5 +12,9 @@ trail-collision:
 	python trail/exp_collision.py
 trail-core:
 	python trail/trail_core.py
+# run the trail codes for point cloud tree env
 trail-pc_tree:
 	python trail/trail_pc_tree_env.py
+# run t he trail codes for CoreTreeEnv
+trail-core_tree:
+	python trail/trail_core_env.py

@@ -8,7 +8,7 @@ import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
 
-import tree_env
+import tree_envs
 import utils
 import random
 
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     # collision_occupy()
 
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
-        env=tree_env.PolyLineTreeEnv(
+        env=tree_envs.PolyLineTreeEnv(
             max_grow_steps=20,
             max_bud_num=200,
             num_growth_per_bud=20,
@@ -72,6 +72,6 @@ if __name__ == "__main__":
         if d:
             break
     # env.destory()
-    raw_env_g: tree_env.PolyLineTreeEnv = env.env  # type: ignore
+    raw_env_g: tree_envs.PolyLineTreeEnv = env.env  # type: ignore
     raw_env_g.final_plot(interactive=True)
     # while True:

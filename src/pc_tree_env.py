@@ -123,7 +123,7 @@ class PointCloudSingleTreeEnv(BaseEnvTrait):
             self.pc_axes: plt.Axes = self.f.add_subplot(131, projection="3d")
             self.arbor_axes: plt.Axes = self.f.add_subplot(132, projection="3d")
             self.pc_collision_axes: plt.Axes = self.f.add_subplot(133, projection="3d")
-        self.arbor_engine.matplot(self.arbor_axes)
+        self.arbor_engine.matplot_tree(self.arbor_axes)
         self.plot_point_collision()
         self.pc_axes.plot(self.point_cloud_mat[:, 0], self.point_cloud_mat[:, 1], self.point_cloud_mat[:, 2], "o", markersize=1)
         plt.pause(0.1)

@@ -10,13 +10,103 @@ from matplotlib import cm
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import pylab
+import matplotlib.figure
 from PIL import Image
 from rlvortex.envs.base_env import BaseEnvTrait, EnvWrapper
 import tqdm
 
 # project package import
 import utils
+import core
+
+
+class CoreTreeEnv(BaseEnvTrait):
+    def __init__(
+        self,
+        *,
+        max_grow_steps: int,
+        max_bud_num: int,
+        num_growth_per_bud: int,
+        init_dis: float,
+        delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
+        delta_rotate_range: np.ndarray[int, np.dtype[np.float64]],
+        init_branch_rot: float,
+        branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
+        branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
+        sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
+        voxel_space_interval: float,
+        voxel_space_half_size: int,
+    ) -> None:
+        super().__init__()
+        self.arbor_engine: core.ArborEngine = core.ArborEngine(
+            max_grow_steps=max_grow_steps,
+            max_bud_num=max_bud_num,
+            num_growth_per_bud=num_growth_per_bud,
+            init_dis=init_dis,
+            delta_dis_range=delta_dis_range,
+            delta_rotate_range=delta_rotate_range,
+            init_branch_rot=init_branch_rot,
+            branch_rot_range=branch_rot_range,
+            branch_prob_range=branch_prob_range,
+            sleep_prob_range=sleep_prob_range,
+            voxel_space_interval=voxel_space_interval,
+            voxel_space_half_size=voxel_space_half_size,
+        )
+        self.voxel_space_interval = voxel_space_interval
+        self.voxel_space_half_size = voxel_space_half_size
+        # plot variables
+        self.f: Optional[matplotlib.figure.Figure] = None
+        # reward weights
+        self.w_height = 1
+        self.w_branch_dir = 1
+        self.w_collision = -1
+        self.w_light = 1
+
+    @property
+    def action_dim(self) -> tuple:
+        return self.arbor_engine.action_dim
+
+    @property
+    def observation_dim(self) -> tuple:
+        return self.arbor_engine.observation_dim
+
+    @property
+    def action_n(self) -> int:
+        return 0
+
+    @property
+    def renderable(self) -> bool:
+        return self.f is not None
+
+    def awake(self):
+        pass
+
+    def reset(self):
+        self.arbor_engine.reset()
+
+    def destory(self):
+        if self.renderable:
+            plt.close(self.f)
+
+    def sample_action(self) -> np.ndarray:
+        return self.arbor_engine.sample_action()
+
+    def step(self, action: np.ndarray):
+        done = self.arbor_engine.step(action=action)
+        reward = self.__compute_reward()
+        return {}, reward, done, {}
+
+    def __compute_reward(self):
+        return 0
+
+    def render(self):
+        if self.f is None:
+            self.f: Optional[matplotlib.figure.Figure] = plt.figure()
+            self.tree_axes: plt.Axes = self.f.add_subplot(121, projection="3d")
+            self.collision_axes: plt.Axes = self.f.add_subplot(122, projection="3d")
+        self.arbor_engine.matplot_tree(self.tree_axes)
+        self.arbor_engine.matplot_collision(self.collision_axes)
+        plt.pause(0.01)
 
 
 class PolyLineTreeEnv(BaseEnvTrait):
@@ -32,8 +122,8 @@ class PolyLineTreeEnv(BaseEnvTrait):
         branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
-        collision_space_interval: float,
-        collision_space_half_size: int,
+        voxel_space_interval: float,
+        voxel_space_half_size: int,
         matplot: bool = True,
         headless: bool = True,
         render_path: str = os.getcwd(),  # the path to save the render result, used only when render and headless is True
@@ -59,9 +149,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.branch_prob_range = branch_prob_range
         assert len(sleep_prob_range) == 2
         self.sleep_prob_range = sleep_prob_range
-        assert collision_space_interval > 0.0
-        self.collision_space_interval = collision_space_interval
-        self.collision_space_half_size = collision_space_half_size
+        assert voxel_space_interval > 0.0
+        self.voxel_space_interval = voxel_space_interval
+        self.voxel_space_half_size = voxel_space_half_size
         # the angle between the new branch and the parent branch,
         # the init rotation of the new node is compute by rotating alpha degree around parent node x axis ([1,0,0] in local frame)
         self.branch_rot_range = branch_rot_range
@@ -109,8 +199,8 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.buds_states_h[0, 8] = self.num_growth_per_bud
         self.buds_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_bud_num, self.num_feats))
         self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(np.int32)
-        self.collision_space: np.ndarray = np.zeros(
-            (2 * self.collision_space_half_size, 2 * self.collision_space_half_size, 2 * self.collision_space_half_size)
+        self.voxel_space: np.ndarray = np.zeros(
+            (2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size)
         )
 
     # this method is called after the action is performed.
@@ -323,13 +413,13 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[: self.num_bud]
         # 6. compute collision occupy
         all_exists_buds_indices = np.where(self.buds_states_hist[:, :, 0] == 1)  # get all exists buds' indices
-        occupied_voxel_indices = (
-            self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.collision_space_interval
-        ).astype(np.int32)
+        occupied_voxel_indices = (self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.voxel_space_interval).astype(
+            np.int32
+        )
         collision_indices = (
-            occupied_voxel_indices + np.array([self.collision_space_half_size, 0, self.collision_space_half_size])
+            occupied_voxel_indices + np.array([self.voxel_space_half_size, 0, self.voxel_space_half_size])
         ).transpose()
-        self.collision_space[tuple(collision_indices)] = 1
+        self.voxel_space[tuple(collision_indices)] = 1
 
         # 6.Compute Rewards Functions
         # 6.1 compute the height reward by summizeing
@@ -376,16 +466,16 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.collision_ax.dist = 10  # type: ignore
         # Option 1. plot collision space with 3d heatmap
         # elements = (
-        #     np.arange(2 * self.collision_space_half_size) - self.collision_space_half_size
-        # ) * self.collision_space_interval
-        # xv, yv, zv = np.meshgrid(elements, elements + self.collision_space_half_size * self.collision_space_interval, elements)
-        # heats = self.collision_space.flatten()
+        #     np.arange(2 * self.voxel_space_half_size) - self.voxel_space_half_size
+        # ) * self.voxel_space_interval
+        # xv, yv, zv = np.meshgrid(elements, elements + self.voxel_space_half_size * self.voxel_space_interval, elements)
+        # heats = self.voxel_space.flatten()
         # colors = cm.hsv(heats / max(heats))
         # self.collision_ax.scatter(xv.flatten(), zv.flatten(), yv.flatten(), c=colors, s=4)
         # Option 2. plot collision spacw with scatter
-        xv, yv, zv = np.where(self.collision_space > 0)
-        xv -= self.collision_space_half_size
-        zv -= self.collision_space_half_size
+        xv, yv, zv = np.where(self.voxel_space > 0)
+        xv -= self.voxel_space_half_size
+        zv -= self.voxel_space_half_size
         self.collision_ax.plot(xv, zv, yv, "o", markersize=2)
         self.collision_ax.set_aspect("equal", adjustable="box")
         z_limit = np.max(np.abs(yv)) * 1.1

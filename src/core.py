@@ -1,5 +1,6 @@
 import random
 from typing import List
+import warnings
 import matplotlib
 
 import numpy as np
@@ -23,8 +24,8 @@ class ArborEngine:
         branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
-        collision_space_interval: float,
-        collision_space_half_size: int,
+        voxel_space_interval: float,
+        voxel_space_half_size: int,
     ) -> None:
         super().__init__()
         assert max_grow_steps >= 1, "max grow steps must be at least 1"  # the maximum number of steps for each episode
@@ -60,11 +61,11 @@ class ArborEngine:
         assert len(sleep_prob_range) == 2
         # the probabiliy of a bud sleep at each step
         self.sleep_prob_range = sleep_prob_range
-        assert collision_space_interval > 0.0
+        assert voxel_space_interval > 0.0
         # the size of each collision voxel
-        self.collision_space_interval = collision_space_interval
+        self.voxel_space_interval = voxel_space_interval
         # the number of voxels in x,y,z dimension
-        self.collision_space_half_size = collision_space_half_size
+        self.voxel_space_half_size = voxel_space_half_size
         # buds on the tree
         self.steps = 0
         self.done = False
@@ -86,7 +87,7 @@ class ArborEngine:
         4. sleep[7]
         5. num_growth[8]
         """
-        # buds_state_h stores the information of the buds at the end of the branchs (indicates the buds can act)
+        # buds_state_h stores the information of all the nodes (indicates the buds can act)
         # budsa_state_h -> (max_bud_num, num_feats)
         self.buds_states_h: np.ndarray = np.zeros((self.max_bud_num, self.num_feats))
         self.buds_states_h[0, 0] = 1  # set first bud exists
@@ -97,8 +98,8 @@ class ArborEngine:
         # the 3rd dimension stores the information of ith step, jth bud's features
         self.buds_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_bud_num, self.num_feats))
         self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(np.int32)
-        self.collision_space: np.ndarray = np.zeros(
-            (2 * self.collision_space_half_size, 2 * self.collision_space_half_size, 2 * self.collision_space_half_size)
+        self.node_occupy_space: np.ndarray = np.zeros(
+            (2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size)
         )
 
     @property
@@ -215,16 +216,19 @@ class ArborEngine:
             len(grow_indices) == num_child_buds
         ), f"len(grow_indices)={len(grow_indices)} does not match num_child_buds={num_child_buds}"
 
-        ############################################## early stop: buds num max ##############################################
         # if num_bud is max, then no new branch will be grown
         if num_child_buds > 0 and self.num_bud <= self.max_bud_num:
             # grow new buds by setting it as exist, after all the existing buds
             child_buds_indices = np.arange(self.num_bud, self.num_bud + num_child_buds)
             self.buds_branch(grow_indices, child_buds_indices)
 
-        # 5. record information into history
+        ############################################## early stop: buds num max ##############################################
         self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[: self.num_bud]
-        self.collision_detection()
+        self.node_occupy_voxel_space()
+        #
+        # if any node is under ground, then stop
+        if np.any(self.buds_states_h[: self.num_bud, 2] < 0):
+            return True
         return False
 
     def buds_grow(self, bud_indices_g: np.ndarray, delta_move_dis_g: np.ndarray, delta_euler_degrees_g: np.ndarray):
@@ -323,17 +327,19 @@ class ArborEngine:
         # record the birthday of the new buds
         self.buds_born_step_hist[child_buds_indice] = self.steps
 
-    def collision_detection(self) -> None:
+    def node_occupy_voxel_space(self) -> None:
         # 6. compute collision occupy
         all_exists_buds_indices = np.where(self.buds_states_hist[:, :, 0] == 1)  # get all exists buds' indices
-        occupied_voxel_indices = (
-            self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.collision_space_interval
-        ).astype(np.int32)
+        occupied_voxel_indices = (self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.voxel_space_interval).astype(
+            np.int32
+        )
         collision_indices = (
-            occupied_voxel_indices + np.array([self.collision_space_half_size, 0, self.collision_space_half_size])
+            occupied_voxel_indices + np.array([self.voxel_space_half_size, 0, self.voxel_space_half_size])
         ).transpose()
-        collision_indices = np.clip(collision_indices, 0, self.collision_space_half_size * 2 - 1)
-        self.collision_space[tuple(collision_indices)] = 1
+        if np.any(collision_indices < 0) or np.any(collision_indices > self.voxel_space_half_size * 2 - 1):
+            warnings.warn(f"[step/collision_detection] {self.steps}: tree node position outside collision voxel space")
+        collision_indices = np.clip(collision_indices, 0, self.voxel_space_half_size * 2 - 1)
+        self.node_occupy_space[tuple(collision_indices)] += 1
 
     def sample_action(self) -> np.ndarray:
         acts = np.random.uniform(-1, 1, self.max_bud_num * 6).reshape(self.max_bud_num, -1)
@@ -356,11 +362,11 @@ class ArborEngine:
     def matplot_collision(self, plt_axes: axes.Axes) -> None:
         plt_axes.clear()
         plt_axes.dist = 8  # type: ignore
-        xv, yv, zv = np.where(self.collision_space > 0)
+        xv, yv, zv = np.where(self.node_occupy_space > 0)
         col_vertices = (
             np.array([xv, yv, zv], dtype=np.float32)
-            - np.array([self.collision_space_half_size, 0, self.collision_space_half_size]).reshape(3, 1)
-        ) * self.collision_space_interval
+            - np.array([self.voxel_space_half_size, 0, self.voxel_space_half_size]).reshape(3, 1)
+        ) * self.voxel_space_interval
         plt_axes.plot(col_vertices[0, :], col_vertices[2, :], col_vertices[1, :], "o", markersize=2)
         plt_axes.set_aspect("equal", adjustable="box")
         plt_axes.set_zlim(-0.5, np.max(col_vertices[1, :]))  # type: ignore

@@ -24,7 +24,7 @@ import rlvortex
 import rlvortex.envs.base_env as base_env
 
 # core imports
-import tree_env
+import tree_envs
 import random
 import torch.nn as nn
 
@@ -65,7 +65,7 @@ def make_env(headless=True):
     sleep_prob_range = np.array([0.001, 1.0])
     matplot = True
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
-        env=tree_env.PolyLineTreeEnv(
+        env=tree_envs.PolyLineTreeEnv(
             max_grow_steps=grow_steps,
             max_bud_num=max_bud_num,
             num_growth_per_bud=num_growth_per_bud,

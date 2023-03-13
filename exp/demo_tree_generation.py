@@ -10,7 +10,7 @@ import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
 
-import tree_env
+import tree_envs
 import utils
 import random
 
@@ -19,7 +19,7 @@ np.random.seed(11)
 
 
 def plot_tree(params: NamedTuple, param_type: str, idx: int = 0):
-    env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(env=tree_env.PolyLineTreeEnv(*params))
+    env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(env=tree_envs.PolyLineTreeEnv(*params))
     env.awake()
     o = env.reset()
     for _ in range(1000):
@@ -27,7 +27,7 @@ def plot_tree(params: NamedTuple, param_type: str, idx: int = 0):
         o, r, d, _ = env.step(a)
         if d:
             break
-    raw_env_g: tree_env.PolyLineTreeEnv = env.env  # type: ignore
+    raw_env_g: tree_envs.PolyLineTreeEnv = env.env  # type: ignore
     raw_env_g.final_plot(name=param_type + str(idx), num_frame=600)
     env.destory()
 

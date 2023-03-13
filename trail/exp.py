@@ -8,7 +8,7 @@ import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
 
-import tree_env
+import tree_envs
 import utils
 import random
 
@@ -18,7 +18,7 @@ np.random.seed(11)
 
 def exp_env():
     env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
-        env=tree_env.PolyLineTreeEnv(
+        env=tree_envs.PolyLineTreeEnv(
             max_bud_num=2000,
             delta_dis_range=np.array([0.0, 0.4]),
             delta_rotate_range=np.array([-10, 10]),
@@ -32,7 +32,7 @@ def exp_env():
         a = env.sample_action()
         env.step(a)
     # env.destory()
-    raw_env_g: tree_env.PolyLineTreeEnv = env.env  # type: ignore
+    raw_env_g: tree_envs.PolyLineTreeEnv = env.env  # type: ignore
     raw_env_g.final_plot()
     # while True:
     #     pass

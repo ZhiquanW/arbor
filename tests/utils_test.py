@@ -6,7 +6,7 @@ import numpy as np
 import rlvortex
 import rlvortex.envs.base_env as base_env
 import utils
-import tree_env
+import tree_envs
 
 
 def test_unscale_scale_by_range():
@@ -92,8 +92,6 @@ def test_rot_vector_by_xyz():
     rot_vector = utils.rot_vector_by_eulers(vector, rot)
     right_rot_vector = np.array([[-1, 0, 0]]).transpose()
     assert np.allclose(rot_vector, right_rot_vector), f"{rot_vector} != \n {right_rot_vector}"
-
-
 
 
 if __name__ == "__main__":
