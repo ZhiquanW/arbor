@@ -1,7 +1,7 @@
 # buit-in import
 import io
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 from time import gmtime, strftime
 import random
 from matplotlib import cm
@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib.figure
 from PIL import Image
 from rlvortex.envs.base_env import BaseEnvTrait, EnvWrapper
+import plotly
+from plotly.subplots import make_subplots
 import tqdm
 
 # project package import
@@ -34,8 +36,12 @@ class CoreTreeEnv(BaseEnvTrait):
         branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
-        voxel_space_interval: float,
-        voxel_space_half_size: int,
+        collision_space_interval: float,
+        collision_space_half_size: int,
+        shadow_space_interval: float,
+        shadow_space_half_size: int,
+        shadow_pyramid_half_size,
+        delta_shadow_value,
     ) -> None:
         super().__init__()
         self.arbor_engine: core.ArborEngine = core.ArborEngine(
@@ -49,13 +55,18 @@ class CoreTreeEnv(BaseEnvTrait):
             branch_rot_range=branch_rot_range,
             branch_prob_range=branch_prob_range,
             sleep_prob_range=sleep_prob_range,
-            voxel_space_interval=voxel_space_interval,
-            voxel_space_half_size=voxel_space_half_size,
+            collision_space_interval=collision_space_interval,
+            collision_space_half_size=collision_space_half_size,
+            shadow_space_interval=shadow_space_interval,
+            shadow_space_half_size=shadow_space_half_size,
+            shadow_pyramid_half_size=shadow_pyramid_half_size,
+            delta_shadow_value=delta_shadow_value,
         )
-        self.voxel_space_interval = voxel_space_interval
-        self.voxel_space_half_size = voxel_space_half_size
+        self.voxel_space_interval = collision_space_interval
+        self.voxel_space_half_size = collision_space_half_size
         # plot variables
-        self.f: Optional[matplotlib.figure.Figure] = None
+        self.matplot_figure: Optional[matplotlib.figure.Figure] = None
+        self.plotly_figure: Optional[plotly.graph_objs._figure.Figure] = None
         # reward weights
         self.w_height = 1
         self.w_branch_dir = 1
@@ -76,7 +87,7 @@ class CoreTreeEnv(BaseEnvTrait):
 
     @property
     def renderable(self) -> bool:
-        return self.f is not None
+        return self.matplot_figure is not None or self.plotly_figure is not None
 
     def awake(self):
         pass
@@ -86,7 +97,7 @@ class CoreTreeEnv(BaseEnvTrait):
 
     def destory(self):
         if self.renderable:
-            plt.close(self.f)
+            plt.close(self.f)  # type: ignore
 
     def sample_action(self) -> np.ndarray:
         return self.arbor_engine.sample_action()
@@ -99,14 +110,33 @@ class CoreTreeEnv(BaseEnvTrait):
     def __compute_reward(self):
         return 0
 
-    def render(self):
-        if self.f is None:
-            self.f: Optional[matplotlib.figure.Figure] = plt.figure()
-            self.tree_axes: plt.Axes = self.f.add_subplot(121, projection="3d")
-            self.collision_axes: plt.Axes = self.f.add_subplot(122, projection="3d")
+    def matplot_render(self):
+        if self.matplot_figure is None:
+            self.matplot_figure: Optional[matplotlib.figure.Figure] = plt.figure()
+            self.tree_axes: plt.Axes = self.matplot_figure.add_subplot(131, projection="3d")
+            self.collision_axes: plt.Axes = self.matplot_figure.add_subplot(132, projection="3d")
+            self.shadow_axes: plt.Axes = self.matplot_figure.add_subplot(133, projection="3d")
         self.arbor_engine.matplot_tree(self.tree_axes)
         self.arbor_engine.matplot_collision(self.collision_axes)
+        self.arbor_engine.matplot_shadow(self.shadow_axes)
         plt.pause(0.01)
+
+    def plotly_render(self):
+        if self.plotly_figure is None:
+            self.plotly_figure: Optional[plotly.graph_objs._figure.Figure] = make_subplots(
+                rows=3,
+                cols=1,
+                specs=[[{"type": "Scatter3d"}]] * 3,
+            )
+        self.arbor_engine.plotly_tree(self.plotly_figure)
+        self.arbor_engine.plotly_collision(self.plotly_figure)
+        self.arbor_engine.plotly_shadow(self.plotly_figure)
+        # tight layout
+        self.plotly_figure.update_layout(margin=dict(l=0, r=0, b=0, t=20), height=4096)
+        self.plotly_figure.show()
+
+    def render(self):
+        self.plotly_render()
 
 
 class PolyLineTreeEnv(BaseEnvTrait):

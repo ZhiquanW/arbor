@@ -32,8 +32,12 @@ if __name__ == "__main__":
             branch_rot_range=np.array([-10, 10]),
             branch_prob_range=np.array([0.1, 0.5]),
             sleep_prob_range=np.array([0.001, 0.01]),
-            voxel_space_interval=0.1,
-            voxel_space_half_size=200,
+            collision_space_interval=0.1,
+            collision_space_half_size=200,
+            shadow_space_interval=0.2,
+            shadow_space_half_size=100,
+            shadow_pyramid_half_size=20,
+            delta_shadow_value=0.1,
         )
     )
     env.awake()
@@ -42,10 +46,6 @@ if __name__ == "__main__":
         a = env.sample_action()
         o, r, d, _ = env.step(a)
         if d:
-            print("Done")
-            env.render()
-            # plt.show()
-            env.reset()
-            input()
-    plt.show()
+            break
+    env.render()
     # env.destory()

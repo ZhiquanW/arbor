@@ -1,5 +1,9 @@
 # create conda environment as 
 # conda create -n arbor python=3.9
+
+# run the trail codes for CoreTreeEnv
+trail-core_tree:
+	python trail/trail_core_env.py
 env:
 	pip install -r requirements.txt
 test:
@@ -15,6 +19,3 @@ trail-core:
 # run the trail codes for point cloud tree env
 trail-pc_tree:
 	python trail/trail_pc_tree_env.py
-# run t he trail codes for CoreTreeEnv
-trail-core_tree:
-	python trail/trail_core_env.py
