@@ -20,7 +20,7 @@ np.random.seed(11)
 
 if __name__ == "__main__":
 
-    env: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
+    env_wrapper: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_envs.CoreTreeEnv(
             max_grow_steps=20,
             max_bud_num=200,
@@ -40,12 +40,12 @@ if __name__ == "__main__":
             delta_shadow_value=0.1,
         )
     )
-    env.awake()
-    o = env.reset()
+    env_wrapper.awake()
+    o = env_wrapper.reset()
     for _ in range(100):
-        a = env.sample_action()
-        o, r, d, _ = env.step(a)
+        a = env_wrapper.sample_action()
+        o, r, d, _ = env_wrapper.step(a)
         if d:
             break
-    env.render()
+    env_wrapper.render()
     # env.destory()

@@ -40,7 +40,7 @@ class ArborEngine:
         self.max_grow_steps = max_grow_steps
         assert max_bud_num >= 2
         # the max number of buds a tree can have
-        self.max_bud_num = max_bud_num
+        self.max_node_num = max_bud_num
         assert num_growth_per_bud > 0
         # the max number of times a bud can grow. when brach, the new buds will inherit the remaining growth num
         self.num_growth_per_bud = num_growth_per_bud
@@ -120,15 +120,15 @@ class ArborEngine:
         """
         # buds_state_h stores the information of all the nodes (indicates the buds can act)
         # budsa_state_h -> (max_bud_num, num_feats)
-        self.nodes_states_h: np.ndarray = np.zeros((self.max_bud_num, self.num_feats))
+        self.nodes_states_h: np.ndarray = np.zeros((self.max_node_num, self.num_feats))
         self.nodes_states_h[0, 0] = 1  # set first bud exists
         self.nodes_states_h[0, 8] = self.num_growth_per_bud
         # buds_state_hist stores all the history information of the tree (buds)
         # the 1st dimension is the ith growth step
         # the 2nd dimension is the jth bud
         # the 3rd dimension stores the information of ith step, jth bud's features
-        self.nodes_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_bud_num, self.num_feats))
-        self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(np.int32)
+        self.nodes_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_node_num, self.num_feats))
+        self.buds_born_step_hist: np.ndarray = np.zeros((self.max_node_num, 1)).astype(np.int32)
         self.collision_space: np.ndarray = np.zeros(
             (2 * self.collision_space_half_size, 2 * self.collision_space_half_size, 2 * self.collision_space_half_size)
         )
@@ -144,11 +144,11 @@ class ArborEngine:
 
     @property
     def action_dim(self):
-        return (self.max_bud_num * 6,)
+        return (self.max_node_num * 6,)
 
     @property
     def observation_dim(self):
-        return (self.max_bud_num * self.num_feats,)
+        return (self.max_node_num * self.num_feats,)
 
     def reset(self):
         self.done = False
@@ -177,9 +177,9 @@ class ArborEngine:
         ############################################## sanity check: input ##############################################
         assert not self.done, f"the modeling process is done, no further action can be performed"
         assert action.shape == (
-            self.max_bud_num * 6,
-        ), f"action dimension is wrong, expect {self.max_bud_num * 6,}, got {action.shape}"
-        action_2d = action.reshape(self.max_bud_num, -1).clip(-1, 1)
+            self.max_node_num * 6,
+        ), f"action dimension is wrong, expect {self.max_node_num * 6,}, got {action.shape}"
+        action_2d = action.reshape(self.max_node_num, -1).clip(-1, 1)
         assert (
             action_2d.shape[0] == self.nodes_states_h.shape[0]
         ), f"action dimension is wrong, expect {self.nodes_states_h.shape[0]}, got {action_2d.shape[0]}"
@@ -255,14 +255,14 @@ class ArborEngine:
         # the indices of the buds that will grow new branches from awake buds and the remaining number of growth > 0
         grow_indices = active_nodes_index[np.where(np.random.uniform(0, 1, num_active_buds) < branch_probs_g)[0]]
         grow_indices = list(filter(lambda row_idx: self.nodes_states_h[row_idx, 8] > 0, grow_indices))
-        num_child_buds = min(len(grow_indices), self.max_bud_num - self.num_bud)
+        num_child_buds = min(len(grow_indices), self.max_node_num - self.num_bud)
         grow_indices = grow_indices[:num_child_buds]
         assert (
             len(grow_indices) == num_child_buds
         ), f"len(grow_indices)={len(grow_indices)} does not match num_child_buds={num_child_buds}"
 
         # if num_bud is max, then no new branch will be grown
-        if num_child_buds > 0 and self.num_bud <= self.max_bud_num:
+        if num_child_buds > 0 and self.num_bud <= self.max_node_num:
             # grow new buds by setting it as exist, after all the existing buds
             child_buds_indices = np.arange(self.num_bud, self.num_bud + num_child_buds)
             self.nodes_branch(grow_indices, child_buds_indices)
@@ -407,17 +407,10 @@ class ArborEngine:
                 + 1 : occupied_voxel_index[2]
                 + self.shadow_pyramid_half_size,
             ] += self.shadow_pyramid_template
-        # i, j, k = np.meshgrid(
-        #     np.arange(-self.shadow_pyramid_half_size + 1, self.shadow_pyramid_half_size),
-        #     np.arange(-self.shadow_pyramid_half_size, 0),
-        #     np.arange(-self.shadow_pyramid_half_size + 1, self.shadow_pyramid_half_size),
-        #     indexing="ij",
-        # )
-        # indices = np.array(occupied_voxel_indices)[:, np.newaxis, np.newaxis, np.newaxis] + np.stack([i, j, k], axis=-1)
-        # self.shadow_space[indices[..., 0], indices[..., 1], indices[..., 2]] += self.shadow_pyramid_template
+        self.shadow_space = np.clip(self.shadow_space, 0.0, 1.0)
 
     def sample_action(self) -> np.ndarray:
-        acts = np.random.uniform(-1, 1, self.max_bud_num * 6).reshape(self.max_bud_num, -1)
+        acts = np.random.uniform(-1, 1, self.max_node_num * 6).reshape(self.max_node_num, -1)
         return acts.flatten()
 
     def matplot_tree(self, plt_axes: axes.Axes) -> None:
@@ -512,8 +505,8 @@ class ArborEngine:
                 marker=dict(
                     size=12,
                     color=self.shadow_space[(xv, yv, zv)],  # set color to an array/list of desired values
-                    colorscale="Viridis",  # choose a colorscale
-                    opacity=0.15,
+                    colorscale="Bluyl",  # choose a colorscale
+                    opacity=0.10,
                 ),
             ),
             row=1,
