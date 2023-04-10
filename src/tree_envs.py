@@ -40,8 +40,11 @@ class CoreTreeEnv(BaseEnvTrait):
         collision_space_half_size: int,
         shadow_space_interval: float,
         shadow_space_half_size: int,
-        shadow_pyramid_half_size,
-        delta_shadow_value,
+        shadow_pyramid_half_size: int,
+        delta_shadow_value: float,
+        init_energy: float,
+        branch_extension_consumption_factor: float,
+        new_branch_consumption: float,
     ) -> None:
         super().__init__()
         self.arbor_engine: core.ArborEngine = core.ArborEngine(
@@ -61,6 +64,9 @@ class CoreTreeEnv(BaseEnvTrait):
             shadow_space_half_size=shadow_space_half_size,
             shadow_pyramid_half_size=shadow_pyramid_half_size,
             delta_shadow_value=delta_shadow_value,
+            init_energy=init_energy,
+            branch_extension_consumption_factor=branch_extension_consumption_factor,
+            new_branch_consumption=new_branch_consumption,
         )
         self.voxel_space_interval = collision_space_interval
         self.voxel_space_half_size = collision_space_half_size
@@ -113,9 +119,9 @@ class CoreTreeEnv(BaseEnvTrait):
     def matplot_render(self):
         if self.matplot_figure is None:
             self.matplot_figure: Optional[matplotlib.figure.Figure] = plt.figure()
-            self.tree_axes: plt.Axes = self.matplot_figure.add_subplot(131, projection="3d")
-            self.collision_axes: plt.Axes = self.matplot_figure.add_subplot(132, projection="3d")
-            self.shadow_axes: plt.Axes = self.matplot_figure.add_subplot(133, projection="3d")
+            self.tree_axes: plt.Axes = self.matplot_figure.add_subplot(131, projection="3d")  # type: ignore
+            self.collision_axes: plt.Axes = self.matplot_figure.add_subplot(132, projection="3d")  # type: ignore
+            self.shadow_axes: plt.Axes = self.matplot_figure.add_subplot(133, projection="3d")  # type: ignore
         self.arbor_engine.matplot_tree(self.tree_axes)
         self.arbor_engine.matplot_collision(self.collision_axes)
         self.arbor_engine.matplot_shadow(self.shadow_axes)
@@ -196,9 +202,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.f = None
         if self.matplot:
             self.f = plt.figure()
-            self.tree_ax = self.f.add_subplot(121, projection="3d")  # subplot has 1 row 2 columns, it takes the first position
+            self.tree_ax = self.f.add_subplot(121, projection="3d")  # type: ignore # subplot has 1 row 2 columns, it takes the first position
             self.collision_ax = self.f.add_subplot(
-                122, projection="3d"
+                122, projection="3d"  # type: ignore
             )  # subplot has 1 row 2 columns, it takes the second position
         # observation variables
         self.__set_init_variables()

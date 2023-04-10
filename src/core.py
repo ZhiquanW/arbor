@@ -32,6 +32,9 @@ class ArborEngine:
         shadow_space_half_size: int,
         shadow_pyramid_half_size: int,
         delta_shadow_value: float,
+        init_energy: float,
+        branch_extension_consumption_factor: float,
+        new_branch_consumption: float,
     ) -> None:
 
         super().__init__()
@@ -80,6 +83,13 @@ class ArborEngine:
         self.delta_shadow_value = delta_shadow_value
         # the shadow pyramid template with values to be added when applied on the shadow space
         self.shadow_pyramid_template: np.ndarray[int, np.dtype[np.float32]] = self.__gen_shadow_pyramid_template()
+        # the initial energy a tree store at the beginning of the simulation
+        self.init_energy: float = init_energy
+        # the proportional of energy consumption to the extened length of a branch
+        self.branch_extension_consumption_factor: float = branch_extension_consumption_factor
+        # the energy consumption of creating a new branch
+        self.new_branch_extension_consumption: float = new_branch_consumption
+        # the total energy of the tree
 
         # buds on the tree
         self.steps = 0
@@ -141,6 +151,8 @@ class ArborEngine:
             )
         )
         self.nodes_occupy_space()
+        # the total energy of a tree
+        self.total_energy = self.init_energy
 
     @property
     def action_dim(self):
@@ -279,14 +291,13 @@ class ArborEngine:
         """perform the grow action of the buds, includeing direction change and grow forward and data recording
 
         args:
-            delta_move_distance: unnormalized moving distance
-            delta_euler_degrees: unnormalized branch rotaion angle (-180,180) in degrees
+            delta_move_distance: unnormalized moving distance, shape: (len(bud_indices), 1)
+            delta_euler_degrees: unnormalized branch rotaion angle (-180,180) in degrees, shape: (len(bud_indices), 1)
         """
 
         # 1. prepare move distance & rotation parameters
         # 1.1 move buds
         move_dis_h = self.init_dis + delta_move_dis_g
-        # 1.2. rotate the direction of the buds via previous rot mat and delta rot mat
         # 1.2.2 get delta rotation matrix
         delta_rot_mat = utils.rot_mats_from_eulers(delta_euler_degrees_g)
         # 1.2.3 get prev rotation matrix, unscale to [-180, 180] in degrees
@@ -315,6 +326,9 @@ class ArborEngine:
         self.nodes_states_h[bud_indices_g, 4:7] = utils.scale_by_range(curr_euler_degree, -180, 180)
         # 2.3 update the remaining num of growth
         self.nodes_states_h[bud_indices_g, 8] -= 1
+
+        # 3. consume energy
+        self.total_energy -= self.branch_extension_consumption_factor * np.sum(move_dis_h)
 
     def nodes_sleep(self, nodes_indice_g: np.ndarray):
         self.nodes_states_h[nodes_indice_g, 7] = 1  # set selected buds to sleep
@@ -371,6 +385,9 @@ class ArborEngine:
         # record the birthday of the new buds
         self.buds_born_step_hist[child_nodes_indice] = self.steps
 
+        # ! consume energy to create new branch
+        self.total_energy -= len(child_nodes_indice) * self.new_branch_extension_consumption
+
     def nodes_occupy_space(self) -> None:
         # 6. compute collision occupy
         all_exists_nodes_index = np.where(self.nodes_states_h[:, 0] == 1)  # get all exists buds' indices
@@ -408,6 +425,11 @@ class ArborEngine:
                 + self.shadow_pyramid_half_size,
             ] += self.shadow_pyramid_template
         self.shadow_space = np.clip(self.shadow_space, 0.0, 1.0)
+
+    def light_energy_collection(
+        self,
+    ) -> None:
+        pass
 
     def sample_action(self) -> np.ndarray:
         acts = np.random.uniform(-1, 1, self.max_node_num * 6).reshape(self.max_node_num, -1)

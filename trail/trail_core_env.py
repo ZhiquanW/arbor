@@ -38,12 +38,16 @@ if __name__ == "__main__":
             shadow_space_half_size=100,
             shadow_pyramid_half_size=20,
             delta_shadow_value=0.1,
+            init_energy=10,
+            branch_extension_consumption_factor=0.1,
+            new_branch_consumption=0.5,
         )
     )
     env_wrapper.awake()
     o = env_wrapper.reset()
     for _ in range(100):
         a = env_wrapper.sample_action()
+        print(env_wrapper.env.arbor_engine.total_energy)  # type: ignore
         o, r, d, _ = env_wrapper.step(a)
         if d:
             break
