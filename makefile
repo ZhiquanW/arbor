@@ -2,7 +2,10 @@
 # conda create -n arbor python=3.9
 
 # run the trail codes for CoreTreeEnv
-trail-core_tree:
+trail-core-tree[local]:
+	@echo 'run trail-core-tree[local]'
+	python trail/trail_core_env.py
+trail-core-tree:
 	python trail/trail_core_env.py
 env:
 	pip install -r requirements.txt

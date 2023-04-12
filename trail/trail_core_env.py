@@ -7,6 +7,7 @@ import random
 
 
 import numpy as np
+import plotly.graph_objects as go
 
 import rlvortex.envs.base_env as base_env
 import rlvortex
@@ -23,8 +24,8 @@ if __name__ == "__main__":
     env_wrapper: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
         env=tree_envs.CoreTreeEnv(
             max_grow_steps=20,
-            max_bud_num=200,
-            num_growth_per_bud=20,
+            max_outer_nodes_num=200,
+            num_growth_per_node=20,
             init_dis=0.5,
             delta_dis_range=np.array([-0.1, 1.0]),
             delta_rotate_range=np.array([[-10, 10], [-30, 30], [-10, 10]]),
@@ -38,18 +39,33 @@ if __name__ == "__main__":
             shadow_space_half_size=100,
             shadow_pyramid_half_size=20,
             delta_shadow_value=0.1,
-            init_energy=10,
-            branch_extension_consumption_factor=0.1,
-            new_branch_consumption=0.5,
+            init_energy=1000,
+            energy_absorption_ratio=0.001,
+            branch_extension_consumption_factor=50,
+            new_branch_consumption=20,
+            node_maintainence_consumption=100,
         )
     )
+    energy_hist = []
     env_wrapper.awake()
     o = env_wrapper.reset()
-    for _ in range(100):
+    for i in range(100):
         a = env_wrapper.sample_action()
-        print(env_wrapper.env.arbor_engine.total_energy)  # type: ignore
+        print(f"total energy at {i} : {env_wrapper.env.arbor_engine.total_energy:.2f}")  # type: ignore
+        energy_hist.append(env_wrapper.env.arbor_engine.total_energy)
         o, r, d, _ = env_wrapper.step(a)
         if d:
             break
     env_wrapper.render()
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=list(range(len(energy_hist))),
+            y=energy_hist,
+            name="energy history",  # Style name/legend entry with html tags
+        )
+    )
+
+    fig.show()
     # env.destory()

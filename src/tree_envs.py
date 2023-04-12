@@ -27,8 +27,8 @@ class CoreTreeEnv(BaseEnvTrait):
         self,
         *,
         max_grow_steps: int,
-        max_bud_num: int,
-        num_growth_per_bud: int,
+        max_outer_nodes_num: int,
+        num_growth_per_node: int,
         init_dis: float,
         delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
         delta_rotate_range: np.ndarray[int, np.dtype[np.float64]],
@@ -43,14 +43,16 @@ class CoreTreeEnv(BaseEnvTrait):
         shadow_pyramid_half_size: int,
         delta_shadow_value: float,
         init_energy: float,
+        energy_absorption_ratio: float,
         branch_extension_consumption_factor: float,
         new_branch_consumption: float,
+        node_maintainence_consumption: float,
     ) -> None:
         super().__init__()
         self.arbor_engine: core.ArborEngine = core.ArborEngine(
             max_grow_steps=max_grow_steps,
-            max_bud_num=max_bud_num,
-            num_growth_per_bud=num_growth_per_bud,
+            max_bud_num=max_outer_nodes_num,
+            num_growth_per_bud=num_growth_per_node,
             init_dis=init_dis,
             delta_dis_range=delta_dis_range,
             delta_rotate_range=delta_rotate_range,
@@ -65,8 +67,10 @@ class CoreTreeEnv(BaseEnvTrait):
             shadow_pyramid_half_size=shadow_pyramid_half_size,
             delta_shadow_value=delta_shadow_value,
             init_energy=init_energy,
+            energy_collection_rate=energy_absorption_ratio,
             branch_extension_consumption_factor=branch_extension_consumption_factor,
             new_branch_consumption=new_branch_consumption,
+            node_maintainence_consumption=node_maintainence_consumption,
         )
         self.voxel_space_interval = collision_space_interval
         self.voxel_space_half_size = collision_space_half_size
@@ -129,7 +133,9 @@ class CoreTreeEnv(BaseEnvTrait):
 
     def plotly_render(self):
         if self.plotly_figure is None:
-            self.plotly_figure: Optional[plotly.graph_objs._figure.Figure] = make_subplots(
+            self.plotly_figure: Optional[
+                plotly.graph_objs._figure.Figure
+            ] = make_subplots(
                 rows=3,
                 cols=1,
                 specs=[[{"type": "Scatter3d"}]] * 3,
@@ -165,7 +171,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         render_path: str = os.getcwd(),  # the path to save the render result, used only when render and headless is True
     ) -> None:
         super().__init__()
-        assert max_grow_steps >= 1, "max grow steps must be at least 1"  # the maximum number of steps for each episode
+        assert (
+            max_grow_steps >= 1
+        ), "max grow steps must be at least 1"  # the maximum number of steps for each episode
         self.max_grow_steps = max_grow_steps
         assert max_bud_num >= 2
         self.max_bud_num = max_bud_num
@@ -180,7 +188,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.init_branch_rot = init_branch_rot
         assert len(delta_rotate_range) == 2
         assert delta_rotate_range[0] >= -180 and delta_rotate_range[1] <= 180
-        self.delta_rotate_range = delta_rotate_range  # rotate around direction with angle in degreee
+        self.delta_rotate_range = (
+            delta_rotate_range  # rotate around direction with angle in degreee
+        )
         assert len(branch_prob_range) == 2
         self.branch_prob_range = branch_prob_range
         assert len(sleep_prob_range) == 2
@@ -233,10 +243,18 @@ class PolyLineTreeEnv(BaseEnvTrait):
         self.buds_states_h: np.ndarray = np.zeros((self.max_bud_num, self.num_feats))
         self.buds_states_h[0, 0] = 1  # set first bud exists
         self.buds_states_h[0, 8] = self.num_growth_per_bud
-        self.buds_states_hist: np.ndarray = np.zeros((self.max_grow_steps, self.max_bud_num, self.num_feats))
-        self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(np.int32)
+        self.buds_states_hist: np.ndarray = np.zeros(
+            (self.max_grow_steps, self.max_bud_num, self.num_feats)
+        )
+        self.buds_born_step_hist: np.ndarray = np.zeros((self.max_bud_num, 1)).astype(
+            np.int32
+        )
         self.voxel_space: np.ndarray = np.zeros(
-            (2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size, 2 * self.voxel_space_half_size)
+            (
+                2 * self.voxel_space_half_size,
+                2 * self.voxel_space_half_size,
+                2 * self.voxel_space_half_size,
+            )
         )
 
     # this method is called after the action is performed.
@@ -262,7 +280,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
 
     @property
     def action_dim(self):
-        return (self.max_bud_num * 6,)  # each bud can move to one direction (2d normalzied vector)
+        return (
+            self.max_bud_num * 6,
+        )  # each bud can move to one direction (2d normalzied vector)
 
     @property
     def action_n(self):
@@ -289,7 +309,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
             sleep_prob: (1)
         )
         """
-        assert action.shape == self.action_dim, f"action dimension is wrong, expect {self.action_dim}, got {action.shape}"
+        assert (
+            action.shape == self.action_dim
+        ), f"action dimension is wrong, expect {self.action_dim}, got {action.shape}"
         action_2d = action.reshape(self.max_bud_num, -1).clip(-1, 1)
         assert (
             action_2d.shape[0] == self.buds_states_h.shape[0]
@@ -300,14 +322,19 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 self.buds_states_h.flatten(),
                 0,
                 True,
-                {"num_buds": self.num_bud, "mean_buds_height": self.buds_states_h[: self.num_bud, 2]},
+                {
+                    "num_buds": self.num_bud,
+                    "mean_buds_height": self.buds_states_h[: self.num_bud, 2],
+                },
             )
         # active bud indices by filtering out  (1. not exists nodes 2. sleeping nodes 3. no remaining growth chance)
         active_bud_indices = np.array(
             list(
                 filter(
                     lambda row_idx: row_idx < self.num_bud,
-                    np.where((self.buds_states_h[:, 7] == 0) & (self.buds_states_h[:, 8] > 0))[0],
+                    np.where(
+                        (self.buds_states_h[:, 7] == 0) & (self.buds_states_h[:, 8] > 0)
+                    )[0],
                 )
             )
         ).astype(np.int32)
@@ -321,7 +348,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
             assert np.all(act_delta_move_dis_g >= -1.0) and np.all(
                 act_delta_move_dis_g <= 1.0
             ), "act of delta move distance should be in the range of [-1, 1]"
-            delta_move_dis_h = utils.unscale_by_range(act_delta_move_dis_g, self.delta_dis_range[0], self.delta_dis_range[1])
+            delta_move_dis_h = utils.unscale_by_range(
+                act_delta_move_dis_g, self.delta_dis_range[0], self.delta_dis_range[1]
+            )
             # 0.2 check rotation between [-1, 1] in xyz
             delta_euler_normalized_g = action_2d[active_bud_indices, 1:4]
             assert np.all(delta_euler_normalized_g >= -1.0) and np.all(
@@ -329,7 +358,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
             ), "delta_euler should be in the range of [-1, 1]"
             # 0.3 check the branch prob is normalized to [0,1]
             branch_probs_g = utils.unscale_by_range(
-                action_2d[active_bud_indices, 4], self.branch_prob_range[0], self.branch_prob_range[1]
+                action_2d[active_bud_indices, 4],
+                self.branch_prob_range[0],
+                self.branch_prob_range[1],
             )
             assert np.all(branch_probs_g >= 0.0) and np.all(
                 branch_probs_g <= 1.0
@@ -340,12 +371,16 @@ class PolyLineTreeEnv(BaseEnvTrait):
             # 1.2. rotate the direction of the buds via previous rot mat and delta rot mat
             # 1.2.1 unscale degree to [-180, 180] in degrees
             delta_euler_degree = utils.unscale_by_range(
-                delta_euler_normalized_g, self.delta_rotate_range[0], self.delta_rotate_range[1]
+                delta_euler_normalized_g,
+                self.delta_rotate_range[0],
+                self.delta_rotate_range[1],
             )
             # 1.2.2 get delta rotation matrix
             delta_rot_mat = utils.rot_mats_from_eulers(delta_euler_degree)
             # 1.2.3 get prev rotation matrix, unscale to [-180, 180] in degrees
-            prev_euler_degree = utils.unscale_by_range(self.buds_states_h[active_bud_indices, 4:7], -180, 180)
+            prev_euler_degree = utils.unscale_by_range(
+                self.buds_states_h[active_bud_indices, 4:7], -180, 180
+            )
             prev_rot_mat = utils.rot_mats_from_eulers(prev_euler_degree)
             # 1.3 get current rotation matrix
             assert (
@@ -355,7 +390,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 delta_rot_mat, prev_rot_mat
             )  # multiply num_bud rotation matrixs to get new num_bud rotation matrixs
             # 1.4 store the current rotation matrixs to self.curr_rot_mat for rendering
-            curr_euler_degree = utils.euler_from_rot_mats(self.cur_rot_mats_h[active_bud_indices])
+            curr_euler_degree = utils.euler_from_rot_mats(
+                self.cur_rot_mats_h[active_bud_indices]
+            )
             # 1.5 perform the rotation of up vector via the rotation matrixs
             curr_up_dirs = self.cur_rot_mats_h[active_bud_indices] @ np.array([0, 1, 0])
             assert curr_up_dirs.shape == (
@@ -367,23 +404,35 @@ class PolyLineTreeEnv(BaseEnvTrait):
             # 2.1 update the position
             self.buds_states_h[active_bud_indices, 1:4] += move_dis_h * curr_up_dirs
             # 2.2 update the rotation
-            self.buds_states_h[active_bud_indices, 4:7] = utils.scale_by_range(curr_euler_degree, -180, 180)
+            self.buds_states_h[active_bud_indices, 4:7] = utils.scale_by_range(
+                curr_euler_degree, -180, 180
+            )
             # 2.3 update the remaining num of growth
             self.buds_states_h[active_bud_indices, 8] -= 1
             # 2.4. set buds to sleep
             # the num_awake_buds is the number of buds that are awake before growing new branches
             # check the sleep prob is normalized to [0,1]
             sleep_probs_g = utils.unscale_by_range(
-                action_2d[active_bud_indices, 5], self.sleep_prob_range[0], self.sleep_prob_range[1]
+                action_2d[active_bud_indices, 5],
+                self.sleep_prob_range[0],
+                self.sleep_prob_range[1],
             )
-            assert np.all(sleep_probs_g >= 0.0) and np.all(sleep_probs_g <= 1.0), "sleep_prob should be in the range of [0, 1]"
-            sleep_indices = active_bud_indices[np.where(np.random.uniform(0, 1, num_active_buds) < sleep_probs_g)[0]]
+            assert np.all(sleep_probs_g >= 0.0) and np.all(
+                sleep_probs_g <= 1.0
+            ), "sleep_prob should be in the range of [0, 1]"
+            sleep_indices = active_bud_indices[
+                np.where(np.random.uniform(0, 1, num_active_buds) < sleep_probs_g)[0]
+            ]
             self.buds_states_h[sleep_indices, 7] = 1  # set selected buds to sleep
 
             # 2.5. grow new branch by sampling the prob
             # the indices of the buds that will grow new branches  from awake buds and the remaining number of growth > 0
-            grow_indices = active_bud_indices[np.where(np.random.uniform(0, 1, num_active_buds) < branch_probs_g)[0]]
-            grow_indices = list(filter(lambda row_idx: self.buds_states_h[row_idx, 8] > 0, grow_indices))
+            grow_indices = active_bud_indices[
+                np.where(np.random.uniform(0, 1, num_active_buds) < branch_probs_g)[0]
+            ]
+            grow_indices = list(
+                filter(lambda row_idx: self.buds_states_h[row_idx, 8] > 0, grow_indices)
+            )
             num_child_buds = min(len(grow_indices), self.max_bud_num - self.num_bud)
             grow_indices = grow_indices[:num_child_buds]
             assert (
@@ -392,14 +441,22 @@ class PolyLineTreeEnv(BaseEnvTrait):
             # if num_bud is max, then no new branch will be grown
             if num_child_buds > 0 and self.num_bud < self.max_bud_num:
                 # grow new buds by setting it as exist, after all the existing buds
-                child_buds_indices = np.arange(self.num_bud, self.num_bud + num_child_buds)
+                child_buds_indices = np.arange(
+                    self.num_bud, self.num_bud + num_child_buds
+                )
                 self.num_bud += num_child_buds
-                self.buds_states_h[child_buds_indices, 0] = 1  # set exists to 1 to label there is a node
+                self.buds_states_h[
+                    child_buds_indices, 0
+                ] = 1  # set exists to 1 to label there is a node
                 # set the position to the previous node
-                self.buds_states_h[child_buds_indices, 1:4] = self.buds_states_h[grow_indices, 1:4]
+                self.buds_states_h[child_buds_indices, 1:4] = self.buds_states_h[
+                    grow_indices, 1:4
+                ]
                 # parent_euler = utils.unscale_by_range(self.buds_states_h[grow_indices, 4:7], -180, 180)
                 # parent_rot_mats_g = utils.rot_mats_from_eulers(parent_euler)
-                rot_axes = self.cur_rot_mats_h[grow_indices] @ np.array([1, 0, 0])  # rotate axis depends on the parent branch
+                rot_axes = self.cur_rot_mats_h[grow_indices] @ np.array(
+                    [1, 0, 0]
+                )  # rotate axis depends on the parent branch
                 assert np.allclose(
                     np.linalg.norm(rot_axes, axis=1), 1
                 ), f"the length of rotate axis = {rot_axes} is not 1. get {np.linalg.norm(rot_axes)}"
@@ -415,19 +472,23 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 # TODO: restore
                 new_branch_rot_degree = random.choice([1, -1]) * (
                     self.init_branch_rot
-                    + np.random.uniform(self.branch_rot_range[0], self.branch_rot_range[1], size=num_child_buds).reshape(
-                        num_child_buds, -1
-                    )
+                    + np.random.uniform(
+                        self.branch_rot_range[0],
+                        self.branch_rot_range[1],
+                        size=num_child_buds,
+                    ).reshape(num_child_buds, -1)
                 )
 
-                new_branch_rot_mat = utils.rot_mat_from_axis_angles(rot_axes, new_branch_rot_degree)
+                new_branch_rot_mat = utils.rot_mat_from_axis_angles(
+                    rot_axes, new_branch_rot_degree
+                )
                 assert new_branch_rot_degree.shape == (
                     num_child_buds,
                     1,
                 ), f"new_branch_rot_angle.shape={new_branch_rot_degree.shape} does not match ({num_child_buds}, 1)"
-                new_branch_rot_mat = self.cur_rot_mats_h[grow_indices] @ utils.rot_mat_from_axis_angles(
-                    rot_axes, new_branch_rot_degree
-                )
+                new_branch_rot_mat = self.cur_rot_mats_h[
+                    grow_indices
+                ] @ utils.rot_mat_from_axis_angles(rot_axes, new_branch_rot_degree)
                 assert new_branch_rot_mat.shape == (
                     num_child_buds,
                     3,
@@ -439,21 +500,33 @@ class PolyLineTreeEnv(BaseEnvTrait):
                     3,
                 ), f"new_branch_euler_degree.shape={new_branch_euler_degree.shape} does not match ({num_child_buds}, 3)"
                 # set the rotation of new bud via rotating the parent branch angle
-                self.buds_states_h[child_buds_indices, 4:7] = utils.scale_by_range(new_branch_euler_degree, -180, 180)
+                self.buds_states_h[child_buds_indices, 4:7] = utils.scale_by_range(
+                    new_branch_euler_degree, -180, 180
+                )
                 # set the growth num as the parent branch's num_growth - 1
-                self.buds_states_h[child_buds_indices, 8] = self.buds_states_h[grow_indices, 8] - 1
-                assert np.all(self.buds_states_h[:, 8] >= 0), "the number of remaining growth chance must be positive"
+                self.buds_states_h[child_buds_indices, 8] = (
+                    self.buds_states_h[grow_indices, 8] - 1
+                )
+                assert np.all(
+                    self.buds_states_h[:, 8] >= 0
+                ), "the number of remaining growth chance must be positive"
                 # record the birthday of the new buds
                 self.buds_born_step_hist[child_buds_indices] = self.steps
         # 5. record information into history
-        self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[: self.num_bud]
+        self.buds_states_hist[self.steps, : self.num_bud] = self.buds_states_h[
+            : self.num_bud
+        ]
         # 6. compute collision occupy
-        all_exists_buds_indices = np.where(self.buds_states_hist[:, :, 0] == 1)  # get all exists buds' indices
-        occupied_voxel_indices = (self.buds_states_hist[:, :, 1:4][all_exists_buds_indices] / self.voxel_space_interval).astype(
-            np.int32
-        )
+        all_exists_buds_indices = np.where(
+            self.buds_states_hist[:, :, 0] == 1
+        )  # get all exists buds' indices
+        occupied_voxel_indices = (
+            self.buds_states_hist[:, :, 1:4][all_exists_buds_indices]
+            / self.voxel_space_interval
+        ).astype(np.int32)
         collision_indices = (
-            occupied_voxel_indices + np.array([self.voxel_space_half_size, 0, self.voxel_space_half_size])
+            occupied_voxel_indices
+            + np.array([self.voxel_space_half_size, 0, self.voxel_space_half_size])
         ).transpose()
         self.voxel_space[tuple(collision_indices)] = 1
 
@@ -462,7 +535,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
         buds_height = self.buds_states_h[: self.num_bud, 2]
         r_height = self.w_height * np.mean(buds_height)
         # 6.2 compute the reward of mantain growing direciton
-        r_branch_dir = self.w_branch_dir / np.exp(np.mean(delta_euler_normalized_g**2))
+        r_branch_dir = self.w_branch_dir / np.exp(
+            np.mean(delta_euler_normalized_g**2)
+        )
         reward = r_height + r_branch_dir
         done = num_active_buds == 0 or any(buds_height < 0)
         if not self.renderable:
@@ -489,7 +564,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
 
     def __plot(self, step: Optional[int] = None, max_steps: Optional[int] = None):
         assert self.f is not None, "self.f is None, the environment is not renderable"
-        assert self.tree_ax is not None, "self.ax1 is None, the environment is not renderable"
+        assert (
+            self.tree_ax is not None
+        ), "self.ax1 is None, the environment is not renderable"
         # matplotlib.rcParams["axes.linewidth"] = 0.1  # set the value globally
         self.tree_ax.clear()
         self.collision_ax.clear()
@@ -520,9 +597,15 @@ class PolyLineTreeEnv(BaseEnvTrait):
         tree_zlimit = 0
         for v_idx in range(self.num_bud):
             born_step = int(self.buds_born_step_hist[v_idx])
-            points_x = self.buds_states_hist[born_step : self.steps + 1, v_idx, 1].squeeze()
-            points_y = self.buds_states_hist[born_step : self.steps + 1, v_idx, 2].squeeze()
-            points_z = self.buds_states_hist[born_step : self.steps + 1, v_idx, 3].squeeze()
+            points_x = self.buds_states_hist[
+                born_step : self.steps + 1, v_idx, 1
+            ].squeeze()
+            points_y = self.buds_states_hist[
+                born_step : self.steps + 1, v_idx, 2
+            ].squeeze()
+            points_z = self.buds_states_hist[
+                born_step : self.steps + 1, v_idx, 3
+            ].squeeze()
             self.tree_ax.spines["top"].set_linewidth(0.1)
             self.tree_ax.spines["bottom"].set_linewidth(0.1)
             self.tree_ax.spines["left"].set_linewidth(0.1)
@@ -542,7 +625,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
             if not self.headless:
                 plt.pause(0.1)
 
-    def final_plot(self, interactive: bool = True, name: Optional[str] = None, num_frame: int = 1):
+    def final_plot(
+        self, interactive: bool = True, name: Optional[str] = None, num_frame: int = 1
+    ):
         if self.f is None:
             self.f = plt.figure()
             self.tree_ax: plt.Axes = plt.axes(projection="3d")
@@ -550,7 +635,9 @@ class PolyLineTreeEnv(BaseEnvTrait):
             self.__plot()
             plt.show()
             return
-        fig_name = "tree_" + strftime("%Y-%m-%d|%H:%M:%S", gmtime()) if name is None else name
+        fig_name = (
+            "tree_" + strftime("%Y-%m-%d|%H:%M:%S", gmtime()) if name is None else name
+        )
         if num_frame == 1:
             self.__plot()
             if self.headless:
@@ -574,4 +661,11 @@ class PolyLineTreeEnv(BaseEnvTrait):
                 frames.append(img_arr)
             io_buf.close()
             imgs = [Image.fromarray(frame) for frame in frames]
-            imgs[0].save(fig_name + ".gif", format="gif", save_all=True, append_images=imgs[1:], duration=16, loop=0)
+            imgs[0].save(
+                fig_name + ".gif",
+                format="gif",
+                save_all=True,
+                append_images=imgs[1:],
+                duration=16,
+                loop=0,
+            )
