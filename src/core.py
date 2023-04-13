@@ -1,5 +1,5 @@
 import random
-from typing import List
+from typing import List, Union
 import warnings
 from enum import Enum
 
@@ -7,7 +7,6 @@ import numpy as np
 from matplotlib import axes
 import plotly
 import plotly.graph_objects as go
-import scipy
 import utils
 
 
@@ -35,7 +34,7 @@ class ArborEngine:
         self,
         *,
         max_grow_steps: int,
-        max_bud_num: int,
+        max_outer_node_num: int,
         num_growth_per_bud: int,
         init_dis: float,
         delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
@@ -53,10 +52,10 @@ class ArborEngine:
         energy_mode: EnergyMode,
         init_energy: float,
         max_energy: float,
-        energy_collection_rate: float,
+        init_energy_collection_rate: float,
         energy_collection_rate_decay: EnergyCollectionDecay,
-        branch_extension_consumption_factor: float,
-        new_branch_consumption: float,
+        node_moving_consumption_factor: float,
+        node_generation_consumption: float,
         node_maintainence_consumption: float,
     ) -> None:
         """
@@ -67,9 +66,9 @@ class ArborEngine:
         assert max_grow_steps >= 1, "max grow steps must be at least 1"
         # the max grow steps of the tree
         self.max_grow_steps = max_grow_steps
-        assert max_bud_num >= 2
+        assert max_outer_node_num >= 2
         # the max number of buds a tree can have
-        self.max_node_num = max_bud_num
+        self.max_outer_node_num = max_outer_node_num
         assert num_growth_per_bud > 0
         # the max number of times a bud can grow. when brach,
         # the new buds will inherit the remaining growth num
@@ -131,24 +130,22 @@ class ArborEngine:
         #    the max energy can be stored in a tree
         self.max_energy = max_energy
         # the ratio of energy absorption of each node
-        self.energy_collection_ratio: float = energy_collection_rate
+        self.init_energy_collection_ratio: float = init_energy_collection_rate
         # the energy collection decay mode
         self.energy_collection_rate_decay: EnergyCollectionDecay = (
             energy_collection_rate_decay
         )
         # the proportional of energy consumption to the extened length of a branch
-        self.branch_extension_consumption_factor: float = (
-            branch_extension_consumption_factor
-        )
+        self.node_moving_consumption_factor: float = node_moving_consumption_factor
         # the energy consumption of creating a new branch
-        self.new_branch_extension_consumption: float = new_branch_consumption
+        self.node_generation_consumption: float = node_generation_consumption
         # the energy consumption to maintain a existing node
         self.node_maintainence_consumption = node_maintainence_consumption
         # buds on the tree
         self.steps = 0
         self.done = False
-        # # tentative variables, these varibles are updated in step for other methods to use
-        # self.cur_rot_mats_h = np.zeros((self.max_bud_num, 3, 3))
+        # tentative variables, these varibles are updated in step for other methods
+        # to use self.cur_rot_mats_h = np.zeros((self.max_bud_num, 3, 3))
         self.__set_init_variables()
 
     def __gen_shadow_pyramid_template(self) -> np.ndarray[int, np.dtype[np.float32]]:
@@ -196,7 +193,7 @@ class ArborEngine:
         # buds_state_h stores the information of all the nodes at current time step (indicates the buds can act)  # noqa: E501
         # budsa_state_h -> (max_bud_num, num_feats)
         self.outer_nodes_states_h: np.ndarray = np.zeros(
-            (self.max_node_num, self.num_feats)
+            (self.max_outer_node_num, self.num_feats)
         )
         self.outer_nodes_states_h[0, 0] = 1  # set first bud exists
         self.outer_nodes_states_h[0, 8] = self.num_growth_per_bud
@@ -208,15 +205,15 @@ class ArborEngine:
         # the 2nd dimension is the jth bud
         # the 3rd dimension stores the information of ith step, jth bud's features
         self.nodes_states_hist: np.ndarray = np.zeros(
-            (self.max_grow_steps, self.max_node_num, self.num_feats)
+            (self.max_grow_steps, self.max_outer_node_num, self.num_feats)
         )
         self.nodes_states_hist[
             self.steps, : self.num_outer_nodes
         ] = self.outer_nodes_states_h[: self.num_outer_nodes]
 
-        self.buds_born_step_hist: np.ndarray = np.zeros((self.max_node_num, 1)).astype(
-            np.int32
-        )
+        self.buds_born_step_hist: np.ndarray = np.zeros(
+            (self.max_outer_node_num, 1)
+        ).astype(np.int32)
         self.collision_space: np.ndarray = np.zeros(
             (
                 2 * self.collision_space_half_size,
@@ -238,11 +235,11 @@ class ArborEngine:
 
     @property
     def action_dim(self):
-        return (self.max_node_num * 6,)
+        return (self.max_outer_node_num * 6,)
 
     @property
     def observation_dim(self):
-        return (self.max_node_num * self.num_feats,)
+        return (self.max_outer_node_num * self.num_feats,)
 
     def reset(self):
         self.done = False
@@ -277,50 +274,46 @@ class ArborEngine:
             not self.done
         ), "the modeling process is done, no further action can be performed"
         assert action.shape == (
-            self.max_node_num * 6,
-        ), f"action dimension is wrong, expect {self.max_node_num * 6,}, got {action.shape}"  # noqa: E501
-        action_2d = action.reshape(self.max_node_num, -1).clip(-1, 1)
+            self.max_outer_node_num * 6,
+        ), f"action dimension is wrong, expect {self.max_outer_node_num * 6,}, got {action.shape}"  # noqa: E501
+        action_2d = action.reshape(self.max_outer_node_num, -1).clip(-1, 1)
         assert (
             action_2d.shape[0] == self.outer_nodes_states_h.shape[0]
-        ), f"action dimension is wrong, expect {self.outer_nodes_states_h.shape[0]}, got {action_2d.shape[0]}"
+        ), f"action dimension is wrong, expect {self.outer_nodes_states_h.shape[0]}, got {action_2d.shape[0]}"  # noqa: E501
 
-        self.steps += 1
-        if self.steps == self.max_grow_steps:
-            self.done = True
-            return True
-        # active bud indices by filtering out  (1. non-existing nodes 2. sleeping nodes 3. no remaining growth chance)
-        active_nodes_index = np.array(
+        # active bud indices by filtering out  (1. non-existing nodes 2. sleeping nodes 3. no remaining growth chance) 4. no energy # noqa: E501
+        outer_nodes_index = np.array(
             list(
                 filter(
                     lambda row_idx: row_idx < self.num_outer_nodes,
                     np.where(
                         (self.outer_nodes_states_h[:, 7] == 0)
                         & (self.outer_nodes_states_h[:, 8] > 0)
+                        & (self.outer_nodes_states_h[:, 9] > 0)
                     )[0],
                 )
             )
         ).astype(np.int32)
-        num_active_buds = active_nodes_index.shape[0]
+        num_active_buds = outer_nodes_index.shape[0]
 
-        ############################################## early stop: no active buds ##############################################
+        #################### early stop: no active buds ####################
         if num_active_buds <= 0:
             self.done = True
             return True
 
-        ############################################## sanity check: action attributes ##############################################
+        #################### sanity check: action attributes ####################
         # 0. check incoming action parameters
         # 0.1 check delta move distance between [-1, 1]
 
-        act_delta_move_dis_g = action_2d[active_nodes_index, 0].reshape(-1, 1)
+        act_delta_move_dis_g = action_2d[outer_nodes_index, 0].reshape(-1, 1)
         assert np.all(act_delta_move_dis_g >= -1.0) and np.all(
             act_delta_move_dis_g <= 1.0
         ), "act of delta move distance should be in the range of [-1, 1]"
         delta_move_dis_h = utils.unscale_by_range(
             act_delta_move_dis_g, self.delta_dis_range[0], self.delta_dis_range[1]
         )
-
         # 0.2 check rotation between [-1, 1] in xyz
-        delta_euler_normalized_g = action_2d[active_nodes_index, 1:4]
+        delta_euler_normalized_g = action_2d[outer_nodes_index, 1:4]
         assert np.all(delta_euler_normalized_g >= -1.0) and np.all(
             delta_euler_normalized_g <= 1.0
         ), "delta_euler should be in the range of [-1, 1]"
@@ -334,7 +327,7 @@ class ArborEngine:
 
         # 0.4 check the branch prob is normalized to [0,1]
         branch_probs_g = utils.unscale_by_range(
-            action_2d[active_nodes_index, 4],
+            action_2d[outer_nodes_index, 4],
             self.branch_prob_range[0],
             self.branch_prob_range[1],
         )
@@ -342,36 +335,44 @@ class ArborEngine:
             branch_probs_g <= 1.0
         ), "branch_prob should be in the range of [0, 1]"
 
-        ############################################## buds grow ##############################################
+        #################### buds grow ####################
 
         # 1. prepare move distance & rotation parameters
-        self.nodes_grow(active_nodes_index, delta_move_dis_h, delta_euler_degrees)
+        succ_grow = self.nodes_grow(
+            outer_nodes_index, delta_move_dis_h, delta_euler_degrees
+        )
+        if not succ_grow:
+            print(self.outer_nodes_states_h[outer_nodes_index])
+            self.done = True
+            return True
 
-        ############################################## buds grow ##############################################
+        #################### buds grow ####################
         # cast shadow for each new node
-        self.nodes_cast_shadow(nodes_index_g=active_nodes_index)
+        self.nodes_cast_shadow(nodes_index_g=outer_nodes_index)
 
-        ############################################## buds sleep ##############################################
+        #################### buds sleep ####################
         # 2.4. set buds to sleep
-        # the num_awake_buds is the number of buds that are awake before growing new branches
+        # the num_awake_buds is the number of buds that are awake before
+        # growing new nodes.
         # check the sleep prob is normalized to [0,1]
         sleep_probs_g = utils.unscale_by_range(
-            action_2d[active_nodes_index, 5],
+            action_2d[outer_nodes_index, 5],
             self.sleep_prob_range[0],
             self.sleep_prob_range[1],
         )
         assert np.all(sleep_probs_g >= 0.0) and np.all(
             sleep_probs_g <= 1.0
         ), "sleep_prob should be in the range of [0, 1]"
-        sleep_indices = active_nodes_index[
+        sleep_indices = outer_nodes_index[
             np.where(np.random.uniform(0, 1, num_active_buds) < sleep_probs_g)[0]
         ]
         self.nodes_sleep(sleep_indices)
 
-        ############################################## buds branch ##############################################
+        #################### buds branch ####################
         # 2.5. grow new branch by sampling the prob
-        # the indices of the buds that will grow new branches from awake buds and the remaining number of growth > 0
-        grow_indices = active_nodes_index[
+        # the indices of the buds that will grow new branches from awake buds
+        # and the remaining number of growth > 0
+        grow_indices = outer_nodes_index[
             np.where(np.random.uniform(0, 1, num_active_buds) < branch_probs_g)[0]
         ]
         grow_indices = list(
@@ -380,21 +381,26 @@ class ArborEngine:
             )
         )
         num_child_buds = min(
-            len(grow_indices), self.max_node_num - self.num_outer_nodes
+            len(grow_indices), self.max_outer_node_num - self.num_outer_nodes
         )
         grow_indices = grow_indices[:num_child_buds]
         assert (
             len(grow_indices) == num_child_buds
-        ), f"len(grow_indices)={len(grow_indices)} does not match num_child_buds={num_child_buds}"
+        ), f"len(grow_indices)={len(grow_indices)} does not match num_child_buds={num_child_buds}"  # noqa: E501
 
         # if num_bud is max, then no new branch will be grown
-        if num_child_buds > 0 and self.num_outer_nodes <= self.max_node_num:
+        if num_child_buds > 0 and self.num_outer_nodes <= self.max_outer_node_num:
             # grow new buds by setting it as exist, after all the existing buds
             child_buds_indices = np.arange(
                 self.num_outer_nodes, self.num_outer_nodes + num_child_buds
             )
             self.nodes_branch(grow_indices, child_buds_indices)
 
+        # record node states
+        self.steps += 1
+        if self.steps == self.max_grow_steps:
+            self.done = True
+            return True
         self.nodes_states_hist[
             self.steps, : self.num_outer_nodes
         ] = self.outer_nodes_states_h[: self.num_outer_nodes]
@@ -412,62 +418,91 @@ class ArborEngine:
 
     def nodes_grow(
         self,
-        bud_indices_g: np.ndarray,
+        outer_nodes_index: np.ndarray,
         delta_move_dis_g: np.ndarray,
         delta_euler_degrees_g: np.ndarray,
-    ):
-        """perform the grow action of the buds, includeing direction change and grow forward and data recording
+    ) -> bool:
+        """perform the grow action of the buds, includeing direction change
+           and grow forward and data recording
 
         args:
-            delta_move_distance: unnormalized moving distance, shape: (len(bud_indices), 1)
-            delta_euler_degrees: unnormalized branch rotaion angle (-180,180) in degrees, shape: (len(bud_indices), 1)
+            delta_move_distance: unnormalized moving distance,
+                shape: (len(outer_nodes_index), 1)
+            delta_euler_degrees: unnormalized branch rotaion angle (-180,180) in degrees
+                shape: (len(bud_indices), 3)
+        return:
+            True: the grow is performed successfully
+            False: no nodes can grow (due to lack of energy)
         """
 
         # 1. prepare move distance & rotation parameters
-        # 1.1 move buds
-        move_dis_h = self.init_dis + delta_move_dis_g
+        # 1.1 move buds (check energy consumption)
+        move_dis_h = self.init_dis + delta_move_dis_g.flatten()
+        move_energys_h = self.node_moving_consumption_factor * move_dis_h
+        if self.energy_mode == EnergyMode.tree:
+            # under energy mode [tree], we do not check if the tree have enough energy
+            # to move all these nodes. The moving energy will be consumed and the total
+            # energy could be negative (lead the tree to die)
+
+            # node moving energy consumption
+            self.total_energy -= self.node_moving_consumption_factor * np.sum(
+                move_energys_h
+            )
+            # new node energy consumption
+            self.total_energy -= self.node_generation_consumption * len(
+                outer_nodes_index
+            )
+        elif self.energy_mode == EnergyMode.node:
+            nodes_energy_h = self.outer_nodes_states_h[outer_nodes_index, 9]
+            energy_consumption_budget = (
+                move_energys_h + self.node_generation_consumption
+            )
+            energy_ratio_h = np.clip(nodes_energy_h / energy_consumption_budget, 0, 1)
+            # adaptive node consumption
+            move_dis_h *= energy_ratio_h
+            energy_consumption_expense = energy_ratio_h * energy_consumption_budget
+            #  energy consumption of node moving and node generation
+            # node energy update
+            self.outer_nodes_states_h[
+                outer_nodes_index, 9
+            ] -= energy_consumption_expense
+            self.total_energy -= np.sum(energy_consumption_expense)
+
         # 1.2.2 get delta rotation matrix
         delta_rot_mat = utils.rot_mats_from_eulers(delta_euler_degrees_g)
         # 1.2.3 get prev rotation matrix, unscale to [-180, 180] in degrees
         prev_euler_degree = utils.unscale_by_range(
-            self.outer_nodes_states_h[bud_indices_g, 4:7], -180, 180
+            self.outer_nodes_states_h[outer_nodes_index, 4:7], -180, 180
         )
         prev_rot_mat = utils.rot_mats_from_eulers(prev_euler_degree)
         # 1.3 get current rotation matrix
         assert (
             delta_rot_mat.shape == prev_rot_mat.shape
-        ), f"delta_rot_mat.shape={delta_rot_mat.shape} does not match prev_rot_mat.shape={prev_rot_mat.shape}"
-        buds_rot_mat = np.matmul(
-            delta_rot_mat, prev_rot_mat
-        )  # multiply num_bud rotation matrixs to get new num_bud rotation matrixs
+        ), f"delta_rot_mat.shape={delta_rot_mat.shape} does not matchl prev_rot_mat.shape={prev_rot_mat.shape}"  # noqa: E501
+        # multiply num_bud rotation matrixs to get new num_bud rotation matrixs
+        buds_rot_mat = np.matmul(delta_rot_mat, prev_rot_mat)
         # 1.4 store the current rotation matrixs to self.curr_rot_mat for rendering
         curr_euler_degree = utils.euler_from_rot_mats(buds_rot_mat)
         # 1.5 perform the rotation of up vector via the rotation matrixs
         curr_up_dirs = buds_rot_mat @ np.array([0, 1, 0])
         assert curr_up_dirs.shape == (
-            len(bud_indices_g),
+            len(outer_nodes_index),
             3,
         ), f"curr_up_dirs.shape={curr_up_dirs.shape} does not match (num_bud, 3)"
 
         # 2. update the buds states
         # 2.1 update the position
-        self.outer_nodes_states_h[bud_indices_g, 1:4] += move_dis_h * curr_up_dirs
+        self.outer_nodes_states_h[outer_nodes_index, 1:4] += move_dis_h * curr_up_dirs
         # 2.2 update the rotation
-        self.outer_nodes_states_h[bud_indices_g, 4:7] = utils.scale_by_range(
+        self.outer_nodes_states_h[outer_nodes_index, 4:7] = utils.scale_by_range(
             curr_euler_degree, -180, 180
         )
         # 2.3 update the remaining num of growth
-        self.outer_nodes_states_h[bud_indices_g, 8] -= 1
-
+        self.outer_nodes_states_h[outer_nodes_index, 8] -= 1
         # 3. consume energy
-        if self.energy_mode == EnergyMode.tree:
-            self.total_energy -= self.branch_extension_consumption_factor * np.sum(
-                move_dis_h
-            )
-        elif self.energy_mode == EnergyMode.node:
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
+        # 3.1 node moving energy
+        # 3.2
+        return True
 
     def nodes_sleep(self, nodes_indice_g: np.ndarray):
         self.outer_nodes_states_h[nodes_indice_g, 7] = 1  # set selected buds to sleep
@@ -493,12 +528,13 @@ class ArborEngine:
         )  # rotate axis depends on the parent branch
         assert np.allclose(
             np.linalg.norm(rot_axes, axis=1), 1
-        ), f"the length of rotate axis = {rot_axes} is not 1. get {np.linalg.norm(rot_axes)}"
+        ), f"the length of rotate axis = {rot_axes} is not 1. get {np.linalg.norm(rot_axes)}"  # noqa: E501
         assert rot_axes.shape == (
             num_child_buds,
             3,
         ), f"rotate axis.shape={rot_axes.shape} does not match ({num_child_buds}, 3)"
-        # initialize the rotation matrixs of the new buds, from the parent rotation by rotating from parent up dir n dgrees
+        # initialize the rotation matrixs of the new buds, from the parent rotation by
+        # rotating from parent up dir n dgrees
         assert rot_axes.shape == (
             num_child_buds,
             3,
@@ -516,7 +552,7 @@ class ArborEngine:
         assert new_branch_rot_degree.shape == (
             num_child_buds,
             1,
-        ), f"new_branch_rot_angle.shape={new_branch_rot_degree.shape} does not match ({num_child_buds}, 1)"
+        ), f"new_branch_rot_angle.shape={new_branch_rot_degree.shape} does not match ({num_child_buds}, 1)"  # noqa: E501
         new_branch_rot_mat = parent_rot_mats_g @ utils.rot_mat_from_axis_angles(
             rot_axes, new_branch_rot_degree
         )
@@ -524,12 +560,12 @@ class ArborEngine:
             num_child_buds,
             3,
             3,
-        ), f"new_branch_rot_mat.shape={new_branch_rot_mat.shape} does not match ({num_child_buds}, 3, 3)"
+        ), f"new_branch_rot_mat.shape={new_branch_rot_mat.shape} does not match ({num_child_buds}, 3, 3)"  # noqa: E501
         new_branch_euler_degree = utils.euler_from_rot_mats(new_branch_rot_mat)
         assert new_branch_euler_degree.shape == (
             num_child_buds,
             3,
-        ), f"new_branch_euler_degree.shape={new_branch_euler_degree.shape} does not match ({num_child_buds}, 3)"
+        ), f"new_branch_euler_degree.shape={new_branch_euler_degree.shape} does not match ({num_child_buds}, 3)"  # noqa: E501
         # set the rotation of new bud via rotating the parent branch angle
         self.outer_nodes_states_h[child_nodes_indice, 4:7] = utils.scale_by_range(
             new_branch_euler_degree, -180, 180
@@ -543,11 +579,6 @@ class ArborEngine:
         ), "the number of remaining growth chance must be positive"
         # record the birthday of the new buds
         self.buds_born_step_hist[child_nodes_indice] = self.steps
-
-        # ! consume energy to create new branch
-        self.total_energy -= (
-            len(child_nodes_indice) * self.new_branch_extension_consumption
-        )
 
     def nodes_occupy_space(self) -> None:
         # 6. compute collision occupy
@@ -568,7 +599,7 @@ class ArborEngine:
             collision_indices > self.collision_space_half_size * 2 - 1
         ):
             warnings.warn(
-                f"[step/collision_detection] {self.steps}: tree node position outside collision voxel space"
+                f"[step/collision_detection] {self.steps}: tree node position outside collision voxel space"  # noqa: E501
             )
         collision_indices = np.clip(
             collision_indices, 0, self.collision_space_half_size * 2 - 1
@@ -609,7 +640,14 @@ class ArborEngine:
         """
         compute the active energy consumption of all the nodes based on the shadow space
         """
-        node_indices = np.where(self.nodes_states_hist[:, :, 0] == 1)
+        # todo: revisit to check correctness Apr 12
+        # todo: the energy should be assigned to previous node
+        # 2d index (step, node idx)
+        # get exist , awake nodes indices
+        node_indices = np.where(
+            (self.nodes_states_hist[:, :, 0] == 1)
+            & (self.nodes_states_hist[:, :, 7] == 0)
+        )
         nodes_pos = self.nodes_states_hist[node_indices][:, 1:4]
         occupied_voxel_indices = (nodes_pos / self.shadow_space_interval).astype(
             np.int32
@@ -621,22 +659,90 @@ class ArborEngine:
             ]
         )
         # compute active light energy
-        for occupied_voxel_index in occupied_voxel_indices:
-            self.total_energy += self.energy_collection_ratio * np.sum(
-                1
-                - self.shadow_space[
-                    occupied_voxel_index[0]
-                    - self.shadow_pyramid_half_size
-                    + 1 : occupied_voxel_index[0]
-                    + self.shadow_pyramid_half_size,
-                    occupied_voxel_index[1]
-                    - self.shadow_pyramid_half_size : occupied_voxel_index[1],
-                    occupied_voxel_index[2]
-                    - self.shadow_pyramid_half_size
-                    + 1 : occupied_voxel_index[2]
-                    + self.shadow_pyramid_half_size,
-                ]
+        if self.energy_mode == EnergyMode.tree:
+            energy_collection_rate = self.decayed_energy_collection_rate(
+                self.total_energy
             )
+            print("rate", energy_collection_rate)
+            for occupied_voxel_index in occupied_voxel_indices:
+                self.total_energy += energy_collection_rate * np.mean(
+                    1
+                    - self.shadow_space[
+                        occupied_voxel_index[0]
+                        - self.shadow_pyramid_half_size
+                        + 1 : occupied_voxel_index[0]
+                        + self.shadow_pyramid_half_size,
+                        occupied_voxel_index[1]
+                        - self.shadow_pyramid_half_size : occupied_voxel_index[1],
+                        occupied_voxel_index[2]
+                        - self.shadow_pyramid_half_size
+                        + 1 : occupied_voxel_index[2]
+                        + self.shadow_pyramid_half_size,
+                    ]
+                )
+            self.total_energy = np.min(self.total_energy, self.max_energy)
+        elif self.energy_mode == EnergyMode.node:
+            nodes_energy = self.nodes_states_hist[node_indices][:, 9]
+            energy_collection_rates: np.ndarray = self.decayed_energy_collection_rate(
+                nodes_energy
+            )  # type: ignore
+            for i in range(len(node_indices[0])):
+                node_energy_collection = energy_collection_rates[i] * np.mean(
+                    1
+                    - self.shadow_space[
+                        occupied_voxel_indices[i][0]
+                        - self.shadow_pyramid_half_size
+                        + 1 : occupied_voxel_indices[i][0]
+                        + self.shadow_pyramid_half_size,
+                        occupied_voxel_indices[i][1]
+                        - self.shadow_pyramid_half_size : occupied_voxel_indices[i][1],
+                        occupied_voxel_indices[i][2]
+                        - self.shadow_pyramid_half_size
+                        + 1 : occupied_voxel_indices[i][2]
+                        + self.shadow_pyramid_half_size,
+                    ]
+                )
+                self.nodes_states_hist[
+                    node_indices[0][i], node_indices[1][i]
+                ] += node_energy_collection
+                self.total_energy += node_energy_collection
+
+    def decayed_energy_collection_rate(
+        self, energy: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]:
+        if self.energy_collection_rate_decay.linear:
+            return self.init_energy_collection_ratio * (1 - energy / self.max_energy)
+        else:
+            raise NotImplementedError
+
+    def node_moving_energy_consumption(
+        self, nodes_index_g: np.ndarray, move_energys_g: np.ndarray
+    ) -> None:
+        if self.energy_mode == EnergyMode.tree:
+            self.total_energy -= self.node_moving_consumption_factor * np.sum(
+                move_energys_g
+            )
+        elif self.energy_mode == EnergyMode.node:
+            # filter out the node do not have energy to move
+            moving_energys = self.node_moving_consumption_factor * move_energys_g
+            print(self.outer_nodes_states_h[nodes_index_g, 9])
+            move_nodes_indices_local = np.where(
+                self.outer_nodes_states_h[nodes_index_g][:, 9] > moving_energys
+            )
+            self.outer_nodes_states_h[nodes_index_g][
+                move_nodes_indices_local, 9
+            ] -= moving_energys[move_nodes_indices_local]
+            assert np.all(
+                self.outer_nodes_states_h[nodes_index_g, 9] > 0
+            ), "the energy per node can not be over consumed (must be positive)"
+            print(self.outer_nodes_states_h[nodes_index_g, 9])
+            # print(self.outer_nodes_states_h[move_nodes_indices, 9])
+            # self.outer_nodes_states_h[move_nodes_indices, 9] -= moving_energys
+            # print(self.outer_nodes_states_h[move_nodes_indices, 9])
+            import pdb
+
+            pdb.set_trace()
+        pass
 
     def energy_consumpton_maintainence(self):
         """
@@ -651,8 +757,8 @@ class ArborEngine:
         )
 
     def sample_action(self) -> np.ndarray:
-        acts = np.random.uniform(-1, 1, self.max_node_num * 6).reshape(
-            self.max_node_num, -1
+        acts = np.random.uniform(-1, 1, self.max_outer_node_num * 6).reshape(
+            self.max_outer_node_num, -1
         )
         return acts.flatten()
 

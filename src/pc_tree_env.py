@@ -44,7 +44,7 @@ class PointCloudSingleTreeEnv(BaseEnvTrait):
         super().__init__()
         self.arbor_engine: core.ArborEngine = core.ArborEngine(
             max_grow_steps=max_grow_steps,
-            max_bud_num=max_bud_num,
+            max_outer_node_num=max_bud_num,
             num_growth_per_bud=num_growth_per_bud,
             init_dis=init_dis,
             delta_dis_range=delta_dis_range,
@@ -62,7 +62,11 @@ class PointCloudSingleTreeEnv(BaseEnvTrait):
         assert point_cloud_mat.shape[1] == 3, "point must be in a 3d space"
         self.point_cloud_mat: np.ndarray = point_cloud_mat
         self.point_cloud_collision_space: np.ndarray = np.zeros(
-            (2 * collision_space_half_size, 2 * collision_space_half_size, 2 * collision_space_half_size)
+            (
+                2 * collision_space_half_size,
+                2 * collision_space_half_size,
+                2 * collision_space_half_size,
+            )
         )
         self.__init_pc_collision_space()
         # plot variables
@@ -73,13 +77,26 @@ class PointCloudSingleTreeEnv(BaseEnvTrait):
         occupied_voxel_indices = self.point_cloud_mat / self.collision_space_interval
         # compute collision indices in array by occupied voxel indices
         collision_indices = (
-            occupied_voxel_indices + np.array([self.collision_space_half_size, self.collision_space_half_size, 0])
+            occupied_voxel_indices
+            + np.array(
+                [self.collision_space_half_size, self.collision_space_half_size, 0]
+            )
         ).astype(np.int32)
-        collision_indices = np.clip(collision_indices, 0, self.collision_space_half_size * 2 - 1)
-        self.point_cloud_collision_space: np.ndarray = np.zeros(
-            (2 * self.collision_space_half_size, 2 * self.collision_space_half_size, 2 * self.collision_space_half_size)
+        collision_indices = np.clip(
+            collision_indices, 0, self.collision_space_half_size * 2 - 1
         )
-        collision_indices = (collision_indices[:, 0], collision_indices[:, 1], collision_indices[:, 2])
+        self.point_cloud_collision_space: np.ndarray = np.zeros(
+            (
+                2 * self.collision_space_half_size,
+                2 * self.collision_space_half_size,
+                2 * self.collision_space_half_size,
+            )
+        )
+        collision_indices = (
+            collision_indices[:, 0],
+            collision_indices[:, 1],
+            collision_indices[:, 2],
+        )
         self.point_cloud_collision_space[tuple(collision_indices)] = 1
 
     @property
@@ -125,7 +142,13 @@ class PointCloudSingleTreeEnv(BaseEnvTrait):
             self.pc_collision_axes: plt.Axes = self.f.add_subplot(133, projection="3d")
         self.arbor_engine.matplot_tree(self.arbor_axes)
         self.plot_point_collision()
-        self.pc_axes.plot(self.point_cloud_mat[:, 0], self.point_cloud_mat[:, 1], self.point_cloud_mat[:, 2], "o", markersize=1)
+        self.pc_axes.plot(
+            self.point_cloud_mat[:, 0],
+            self.point_cloud_mat[:, 1],
+            self.point_cloud_mat[:, 2],
+            "o",
+            markersize=1,
+        )
         plt.pause(0.1)
 
     def plot_point_collision(self) -> None:

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     print("run trail core")
     arbor_engine = core.ArborEngine(
         max_grow_steps=20,
-        max_bud_num=200,
+        max_outer_node_num=200,
         num_growth_per_bud=20,
         init_dis=0.5,
         delta_dis_range=np.array([-0.1, 1.0]),
