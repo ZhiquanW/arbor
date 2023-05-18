@@ -32,7 +32,7 @@ if __name__ == "__main__":
             delta_rotate_range=np.array([[-10, 10], [-30, 30], [-10, 10]]),
             init_branch_rot=30,
             branch_rot_range=np.array([-10, 10]),
-            branch_prob_range=np.array([0.0001, 0.001]),
+            branch_prob_range=np.array([0.1, 0.5]),
             sleep_prob_range=np.array([0.001, 0.01]),
             collision_space_interval=0.1,
             collision_space_half_size=200,
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             shadow_space_half_size=100,
             shadow_pyramid_half_size=20,
             delta_shadow_value=0.1,
-            energy_mode=core.EnergyMode.node,
+            energy_mode=core.EnergyMode.tree,
             init_energy=1,
             max_energy=100,
             init_energy_collection_rate=1,
@@ -61,15 +61,15 @@ if __name__ == "__main__":
         if d:
             break
     env_wrapper.render()
-    fig = go.Figure()
+    # fig = go.Figure()
 
-    fig.add_trace(
-        go.Scatter(
-            x=list(range(len(energy_hist))),
-            y=energy_hist,
-            name="energy history",  # Style name/legend entry with html tags
-        )
-    )
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=list(range(len(energy_hist))),
+    #         y=energy_hist,
+    #         name="energy history",  # Style name/legend entry with html tags
+    #     )
+    # )
 
-    fig.show()
+    # fig.show()
     # env.destory()

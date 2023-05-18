@@ -8,6 +8,7 @@ from matplotlib import cm
 
 # third-party import
 import numpy as np
+import torch
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.figure
@@ -19,7 +20,61 @@ import tqdm
 
 # project package import
 import utils
+
 import core
+import sim.torch_arbor as arbor
+
+
+class CoreTorchEnv(BaseEnvTrait):
+    def __init__(
+        self,
+        arbor_engine: arbor.TorchArborEngine,
+    ) -> None:
+        super().__init__()
+        self.arbor_engine = arbor_engine
+
+    @property
+    def action_dim(self):
+        # shape (max_apical_nodes, move_distance(1)+delta_rot(3)+branch_prob(1)+sleep_prob(1))
+        return (self.arbor_engine.max_branches_num * 6, 0)
+
+    @property
+    def observation_dim(self):
+        return self.arbor_engine.nodes_state.shape
+
+    @property
+    def action_n(self):
+        return 0
+
+    @property
+    def renderable(self):
+        return False
+
+    def awake(self):
+        pass
+
+    def reset(self):
+        self.arbor_engine.reset()
+
+    def step(self, action: torch.Tensor):
+        done = self.arbor_engine.step(action=action)
+        reward = 0
+        return {}, reward, done, {}
+
+    def render(self):
+        raise NotImplementedError
+
+    def sample_action(self):
+        return (
+            torch.rand(
+                self.arbor_engine.max_branches_num * 6, device=self.arbor_engine.device
+            )
+            * 2
+            - 1
+        )
+
+    def destory(self):
+        return
 
 
 class CoreTreeEnv(BaseEnvTrait):

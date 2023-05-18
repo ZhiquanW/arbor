@@ -1,7 +1,11 @@
 # create conda environment as 
 # conda create -n arbor python=3.9
-
+dearbor:
+	python src/gui/dearbor.py
 # run the trail codes for CoreTreeEnv
+trail-core-tree[torch]:
+	@echo 'run trail-core-tree[torch]'
+	python trail/trail_torch_arbor.py
 trail-core-tree[local]:
 	@echo 'run trail-core-tree[local]'
 	python trail/trail_core_env.py
