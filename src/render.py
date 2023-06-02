@@ -7,6 +7,100 @@ import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
 import tree_envs
+import sim.torch_arbor as arbor
+import sim.aux_space as auxs_space
+import plotly
+import plotly.graph_objects as go
+from typing import Optional
+import streamlit
+
+
+def plotly_tree_skeleton(
+    fig: Optional[plotly.graph_objs._figure.Figure],
+    arbor_engine: arbor.TorchArborEngine,
+):
+    if fig is None:
+        fig = go.Figure()
+
+    for v_idx in range(arbor_engine.max_branches_num):
+        born_step = int(arbor_engine.branch_birth_hist[v_idx])
+        points_x = arbor_engine.nodes_state[
+            born_step : arbor_engine.steps + 1, v_idx, 5
+        ]
+        points_y = arbor_engine.nodes_state[
+            born_step : arbor_engine.steps + 1, v_idx, 6
+        ]
+        points_z = arbor_engine.nodes_state[
+            born_step : arbor_engine.steps + 1, v_idx, 7
+        ]
+        fig.add_trace(
+            go.Scatter3d(
+                x=points_x,
+                y=points_y,
+                z=points_z,
+                marker_size=3,
+                line=dict(
+                    width=7,
+                ),
+                showlegend=False,
+            ),
+        )
+    if arbor_engine.occupancy_space is not None:
+        voxel_positions = arbor_engine.occupancy_space.get_occupied_voxel_positions()
+        if voxel_positions is not None:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=voxel_positions[:, 0],
+                    y=voxel_positions[:, 1],
+                    z=voxel_positions[:, 2],
+                    mode="markers",
+                    name="occupancy",
+                )
+            )
+    if arbor_engine.shadow_space is not None:
+        voxel_positions = arbor_engine.shadow_space.get_occupied_voxel_positions()
+        xv, yv, zv = torch.where(arbor_engine.shadow_space.space > 0)
+        if voxel_positions is not None:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=voxel_positions[:, 0],
+                    y=voxel_positions[:, 1],
+                    z=voxel_positions[:, 2],
+                    mode="markers",
+                    name="shadow",
+                    marker=dict(
+                        size=12,
+                        color=arbor_engine.shadow_space.space[
+                            (xv, yv, zv)
+                        ],  # set color to an array/list of desired values
+                        colorscale="Bluyl",  # choose a colorscale
+                        opacity=0.20,
+                    ),
+                )
+            )
+    max_range = torch.max(torch.abs(arbor_engine.nodes_state[:, :, 5:8])).item()
+    fig.update_layout(
+        margin=dict(l=0, r=0, b=0, t=0),
+        autosize=False,
+        height=800,
+    )
+    fig.update_layout(
+        scene=dict(
+            aspectmode="cube",
+            xaxis=dict(
+                range=[-max_range, max_range],
+            ),
+            yaxis=dict(
+                range=[-max_range, max_range],
+            ),
+            zaxis=dict(
+                range=[-2.0, 2.0 * max_range],
+            ),
+        ),
+    )
+    fig.update_layout(legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+
+    return fig
 
 
 def get_matplot_fig_size(dpi=256):
@@ -109,7 +203,7 @@ def matplot_tree_energy(
         vmin=0,
         vmax=1,
         cmap="viridis",
-        s=160,
+        s=160,  # type: ignore
         alpha=1.0,
     )
     plt_axes.plot(

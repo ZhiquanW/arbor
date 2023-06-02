@@ -118,7 +118,7 @@ class CoreTreeEnv(BaseEnvTrait):
             branch_rot_range=branch_rot_range,
             branch_prob_range=branch_prob_range,
             sleep_prob_range=sleep_prob_range,
-            collision_space_interval=collision_space_interval,
+            collicollision_space_intervalsion_space_interval=collision_space_interval,
             collision_space_half_size=collision_space_half_size,
             shadow_space_interval=shadow_space_interval,
             shadow_space_half_size=shadow_space_half_size,

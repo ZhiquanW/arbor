@@ -1,5 +1,7 @@
 # create conda environment as 
 # conda create -n arbor python=3.9
+starbor:
+	streamlit run trail/trail_starbor.py
 dearbor:
 	python src/gui/dearbor.py
 # run the trail codes for CoreTreeEnv
