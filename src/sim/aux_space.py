@@ -71,7 +71,7 @@ class TorchVoxelSpace:
             device=self.device,
         )
 
-    def positions_to_voxel_indices(self, positions: torch.Tensor) -> torch.Tensor:
+    def positions_to_voxels_idx(self, positions: torch.Tensor) -> torch.Tensor:
         """
         convert a list of positions to voxel indices
         Args:
@@ -141,7 +141,7 @@ class TorchOccupancySpace(TorchVoxelSpace):
             positions: the positions of the entity
         """
         assert positions.shape[1] == 3, "positions should be a tensor of shape (N,3)"
-        voxel_indices = self.positions_to_voxel_indices(positions).transpose(0, 1)
+        voxel_indices = self.positions_to_voxels_idx(positions).transpose(0, 1)
         self.space[tuple(voxel_indices)] = 1
 
 
@@ -206,7 +206,7 @@ class TorchShadowSpace(TorchVoxelSpace):
         pass
 
     def cast_shadows(self, positions: torch.Tensor) -> None:
-        voxel_indices = self.positions_to_voxel_indices(positions)
+        voxel_indices = self.positions_to_voxels_idx(positions)
         for voxel_index in voxel_indices:
             self.space[
                 voxel_index[0]

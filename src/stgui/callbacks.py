@@ -60,3 +60,10 @@ def max_move_dir_offset_angle_z_callback():
         st.session_state["min_move_dir_offset_angle_z"] + ARBOR_ANGLE_EPSILON,
         st.session_state["max_move_dir_offset_angle_z"],
     )
+
+
+def collection_voxel_half_size_callback():
+    st.session_state.collection_voxel_half_size = min(
+        st.session_state.collection_voxel_half_size,
+        st.session_state.pyramid_half_size,
+    )

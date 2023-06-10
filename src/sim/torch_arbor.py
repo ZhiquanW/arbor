@@ -104,9 +104,7 @@ class TorchArborEngine:
 
     @property
     def alive_nodes_position(self) -> torch.Tensor:
-        # TODO
-
-        return self.nodes_state[self.alive_nodes_idx]
+        return self.nodes_state[self.alive_nodes_idx][:, 5:8]
 
     def nodes_parent_idx(self, steps: int):
         steps = max(0, min(steps, self.max_steps))
@@ -168,6 +166,10 @@ class TorchArborEngine:
             self.shadow_space.cast_shadows(
                 self.next_apical_nodes_state[: self.num_branches, 5:8]
             )
+        if self.energy_module is not None and self.shadow_space is not None:
+            self.energy_module.colelct_energy(
+                self.alive_nodes_position, self.shadow_space
+            )
 
     def reset(self):
         self.__reset_sim_vriable()
@@ -202,21 +204,36 @@ class TorchArborEngine:
         ), f"action dim: {self.action_dim} is expected, given f{action.shape}"
         action = action.view(self.max_branches_num, 6).clip(-1, 1)
         active_nodes_idx = self.get_active_nodes_idx()
-        if len(active_nodes_idx) == 0:
+        num_active_nodes = len(active_nodes_idx)
+        if num_active_nodes == 0:
             return True
-        active_nodes_prev_rot_mat: torch.Tensor = self.__step_nodes_move(
+
+        if self.energy_module is not None:
+            energy_remained = self.energy_module.maintainence_consumption(
+                len(self.alive_nodes_idx[0])
+            )
+            if not energy_remained:
+                self.done = True
+                return self.done
+        active_nodes_prev_rot_mat, succ = self.__step_nodes_move(
             active_nodes_idx=active_nodes_idx,
             action_move_dis=action[:, 0],
             action_delta_rot=action[:, 1:4],
         )
+        if not succ:
+            self.done = True
+            return self.done
         active_nodes_idx = self.__step_nodes_sleep(
             active_nodes_idx=active_nodes_idx, nodes_sleep_prob_action=action[:, 5]
         )
-        self.__step_nodes_branch(
+        succ: bool = self.__step_nodes_branch(
             active_nodes_idx=active_nodes_idx,
             nodes_branch_prob_action=action[:, 4],
             nodes_prev_rot_mat=active_nodes_prev_rot_mat,
         )
+        if not succ:
+            self.done = True
+            return self.done
         self.nodes_state[self.steps + 1, ...] = self.next_apical_nodes_state
         self.apical_nodes_state = self.next_apical_nodes_state
         # compute extra information based on the growth information
@@ -228,13 +245,10 @@ class TorchArborEngine:
             self.shadow_space.cast_shadows(
                 self.next_apical_nodes_state[: self.num_branches, 5:8]
             )
-        if self.energy_module is not None:
-            print("alive nodes idx")
-            print(self.alive_nodes_idx)
-            print(self.nodes_state[self.alive_nodes_idx].shape)
-            print(self.nodes_state[self.alive_nodes_idx][:, 5:8])
-
-            # self.energy_module.compute_energy_collection()
+        if self.energy_module is not None and self.shadow_space is not None:
+            self.energy_module.colelct_energy(
+                self.alive_nodes_position, self.shadow_space
+            )
         self.steps += 1
         if self.steps == self.max_steps:
             self.done = True
@@ -313,7 +327,7 @@ class TorchArborEngine:
         active_nodes_idx: torch.Tensor,
         action_move_dis: torch.Tensor,
         action_delta_rot: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, bool]:
         assert action_move_dis.shape == (
             self.max_branches_num,
         ), f"expect shape f{(self.max_branches_num,1)}, given f{action_move_dis.shape}"
@@ -328,6 +342,11 @@ class TorchArborEngine:
             lower=self.move_dis_range[0],
             upper=self.move_dis_range[1],
         )
+        energy_remained = True
+        if self.energy_module is not None:
+            energy_remained = self.energy_module.move_consumption_consumption(
+                move_distances
+            )
         assert move_distances.shape == (
             num_active_nodes,
         ), f"expect shape f{(num_active_nodes,)}, given f{move_distances.shape}"
@@ -364,7 +383,7 @@ class TorchArborEngine:
         self.next_apical_nodes_state[active_nodes_idx, 11] = move_distances
         # self.branch_birth_hist
         self.num_nodes += num_active_nodes
-        return nodes_prev_rot_mat
+        return nodes_prev_rot_mat, energy_remained
 
     def __compute_branch_rot(
         self, branches_idx: torch.Tensor, nodes_prev_rot_mat: torch.Tensor
@@ -397,10 +416,10 @@ class TorchArborEngine:
         active_nodes_idx: torch.Tensor,
         nodes_branch_prob_action: torch.Tensor,
         nodes_prev_rot_mat: torch.Tensor,
-    ) -> None:
+    ) -> bool:
         num_active_nodes = len(active_nodes_idx)
         if num_active_nodes == 0:
-            return
+            return True
         nodes_branch_prob: torch.Tensor = utils.torch_unscale_by_range(
             nodes_branch_prob_action[active_nodes_idx],
             lower=self.node_branch_prob_range[0],
@@ -410,6 +429,9 @@ class TorchArborEngine:
             torch.rand(num_active_nodes, device=self.device) < nodes_branch_prob
         )[0]
         num_new_branches = min(self.num_remaining_branches, len(local_branch_idx))
+        energy_remained = True
+        if self.energy_module is not None:
+            energy_remained = self.energy_module.branch_consumption(num_new_branches)
         local_branch_idx = local_branch_idx[:num_new_branches]
         new_nodes_rot_euler_normalized = self.__compute_branch_rot(
             local_branch_idx, nodes_prev_rot_mat[local_branch_idx]
@@ -433,6 +455,7 @@ class TorchArborEngine:
         self.next_apical_nodes_state[start_idx:end_idx, 11] = 0
         self.branch_birth_hist[start_idx:end_idx] = self.steps + 1
         self.num_branches = end_idx
+        return energy_remained
 
     def __step_nodes_sleep(
         self, active_nodes_idx: torch.Tensor, nodes_sleep_prob_action: torch.Tensor

@@ -9,7 +9,9 @@ import rlvortex
 import tree_envs
 import sim.torch_arbor as arbor
 import sim.aux_space as auxs_space
+import sim.energy_module as energy
 import plotly
+from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from typing import Optional
 import streamlit
@@ -20,7 +22,12 @@ def plotly_tree_skeleton(
     arbor_engine: arbor.TorchArborEngine,
 ):
     if fig is None:
-        fig = go.Figure()
+        fig = make_subplots(
+            rows=2,
+            row_heights=[0.2, 0.8],
+            specs=[[{"is_3d": False}], [{"is_3d": True}]],
+            vertical_spacing=0.00,
+        )
 
     for v_idx in range(arbor_engine.max_branches_num):
         born_step = int(arbor_engine.branch_birth_hist[v_idx])
@@ -44,6 +51,8 @@ def plotly_tree_skeleton(
                 ),
                 showlegend=False,
             ),
+            row=2,
+            col=1,
         )
     if arbor_engine.occupancy_space is not None:
         voxel_positions = arbor_engine.occupancy_space.get_occupied_voxel_positions()
@@ -55,7 +64,9 @@ def plotly_tree_skeleton(
                     z=voxel_positions[:, 2],
                     mode="markers",
                     name="occupancy",
-                )
+                ),
+                row=2,
+                col=1,
             )
     if arbor_engine.shadow_space is not None:
         voxel_positions = arbor_engine.shadow_space.get_occupied_voxel_positions()
@@ -76,11 +87,17 @@ def plotly_tree_skeleton(
                         colorscale="Bluyl",  # choose a colorscale
                         opacity=0.20,
                     ),
-                )
+                ),
+                row=2,
+                col=1,
             )
     max_range = torch.max(torch.abs(arbor_engine.nodes_state[:, :, 5:8])).item()
     fig.update_layout(
-        margin=dict(l=0, r=0, b=0, t=0),
+        margin=dict(
+            l=0,
+            r=0,
+            b=0,
+        ),
         autosize=False,
         height=800,
     )
@@ -98,7 +115,107 @@ def plotly_tree_skeleton(
             ),
         ),
     )
-    fig.update_layout(legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+    # fig.update_layout(legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+    if arbor_engine.energy_module is not None:
+        plot_x = list(range(len(arbor_engine.energy_module.energy_hist.total_energys)))
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.total_energys,
+                mode="lines+markers",
+                name="total energys",
+            ),
+            row=1,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.maintainence_consumptions,
+                mode="lines+markers",
+                name="maintainence consumptions",
+            ),
+            row=1,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.move_consumptions,
+                mode="lines+markers",
+                name="move consumptions",
+            ),
+            row=1,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.branch_consumptions,
+                mode="lines+markers",
+                name="branch consumptions",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.collected_energys,
+                mode="lines+markers",
+                name="collected energys",
+            ),
+            row=1,
+            col=1,
+        )
+    return fig
+
+
+def plotly_energy_module(
+    fig: Optional[plotly.graph_objs._figure.Figure], energy_hist: energy.EnergyHist
+):
+    if fig is None:
+        fig = go.Figure()
+
+    plot_x = list(range(len(energy_hist.total_energys)))
+    fig.add_trace(
+        go.Scatter(
+            x=plot_x,
+            y=energy_hist.total_energys,
+            mode="lines+markers",
+            name="total energys",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=plot_x,
+            y=energy_hist.maintainence_consumptions,
+            mode="lines+markers",
+            name="maintainence consumptions",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=plot_x,
+            y=energy_hist.move_consumptions,
+            mode="lines+markers",
+            name="move consumptions",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=plot_x,
+            y=energy_hist.branch_consumptions,
+            mode="lines+markers",
+            name="branch consumptions",
+        )
+    )
 
     return fig
 

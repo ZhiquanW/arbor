@@ -13,6 +13,7 @@ import tree_envs  # noqa: E402
 import sim.torch_arbor as arbor  # noqa: E402
 import sim.aux_space as aux_space
 import sim.energy_module as energy
+
 import render
 
 
@@ -23,7 +24,7 @@ class Starbor:
     def launch(self):
         self.__init_gui()
         if "env_wrapper" not in st.session_state:
-            self.__init_engine()
+            self.reset()
 
     def __init_gui(self):
         st.set_page_config(layout="wide")
@@ -196,8 +197,8 @@ class Starbor:
                 st.session_state.shadow_space_half_voxel_size = st.number_input(
                     "shadow space half voxel size", value=50, min_value=1, step=1
                 )
-                st.session_state.pyramid_size = st.number_input(
-                    "pyramid size", value=5, min_value=1, step=1
+                st.session_state.pyramid_half_size = st.number_input(
+                    "pyramid half size", value=5, min_value=1, step=1
                 )
                 st.session_state.shadow_delta = st.number_input(
                     "shadow delta", value=0.05, min_value=0.01, step=0.01
@@ -209,31 +210,36 @@ class Starbor:
                 st.session_state.max_energy = st.number_input(
                     "max energy", value=100.0, min_value=1.0, step=1.0
                 )
+                _ = st.number_input(
+                    "colection voxel half size",
+                    key="collection_voxel_half_size",
+                    value=4,
+                    min_value=1,
+                    step=1,
+                    on_change=callbacks.collection_voxel_half_size_callback,
+                )
+
                 st.session_state.collection_ratio = st.number_input(
                     "collection ratio",
                     value=0.8,
                     min_value=0.0,
                     max_value=1.0,
-                    step=0.1,
+                    step=0.01,
                 )
-                st.session_state.collection_decay = st.number_input(
-                    "collection decay",
-                    value=0.1,
-                    min_value=0.0,
-                    max_value=1.0,
-                    step=0.1,
-                )
+
                 st.session_state.maintainence_consumption_factor = st.number_input(
-                    "maintainence consumption", value=0.1, min_value=0.0, step=0.1
+                    "maintainence consumption", value=0.1, min_value=0.0, step=0.01
                 )
                 st.session_state.branch_consumption_factor = st.number_input(
-                    "branch consumption", value=1.0, min_value=0.0, step=0.1
+                    "branch consumption", value=1.0, min_value=0.0, step=0.01
                 )
                 st.session_state.move_consumption_factor = st.number_input(
-                    "move consumption", value=0.5, min_value=0.0, step=0.1
+                    "move consumption", value=0.5, min_value=0.0, step=0.01
                 )
-        if "fig" in st.session_state:
-            st.plotly_chart(st.session_state.fig, use_container_width=True)
+        # if "energy_plot" in st.session_state:
+        #     st.plotly_chart(st.session_state.energy_plot, use_container_width=True)
+        if "tree_plot" in st.session_state:
+            st.plotly_chart(st.session_state.tree_plot, use_container_width=True)
 
     def __init_engine(self) -> None:
         occupancy_space = aux_space.TorchOccupancySpace(
@@ -244,18 +250,19 @@ class Starbor:
         shadow_space = aux_space.TorchShadowSpace(
             voxel_size=st.session_state.shadow_voxel_size,
             space_half_size=st.session_state.shadow_space_half_voxel_size,
-            pyramid_half_size=st.session_state.pyramid_size,
+            pyramid_half_size=st.session_state.pyramid_half_size,
             shadow_delta=st.session_state.shadow_delta,
             device=torch.device("cpu"),
         )
         energy_module: energy.EnergyModule = energy.EnergyModule(
             init_energy=st.session_state.init_energy,
             max_energy=st.session_state.max_energy,
-            collection_ratio=st.session_state.collection_ratio,
-            collection_decay=st.session_state.collection_decay,
+            collection_voxel_half_size=st.session_state.collection_voxel_half_size,
+            init_collection_ratio=st.session_state.collection_ratio,
             maintainence_consumption_factor=st.session_state.maintainence_consumption_factor,
             move_consumption_factor=st.session_state.move_consumption_factor,
             branch_consumption_factor=st.session_state.branch_consumption_factor,
+            record=True,
         )
         arbor_engine = arbor.TorchArborEngine(
             max_steps=int(st.session_state.max_steps),
@@ -289,23 +296,29 @@ class Starbor:
         env_wrapper = st.session_state.env_wrapper
         while True:
             _, _, done, _ = env_wrapper.step(env_wrapper.sample_action())
+            st.session_state.energy_plot = render.plotly_energy_module(
+                None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+            )
             if done:
                 break
-        st.session_state.fig = render.plotly_tree_skeleton(
+        st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
-        )  # noqa: E501
+        )
 
     def reset(self) -> None:
         self.__init_engine()
-        if "fig" in st.session_state:
-            del st.session_state["fig"]
+        if "tree_plot" in st.session_state:
+            del st.session_state["tree_plot"]
 
     def step(self) -> None:
         env_wrapper = st.session_state.env_wrapper
         if env_wrapper.env.arbor_engine.done:
             return
         env_wrapper.step(env_wrapper.sample_action())
-        st.session_state.fig = render.plotly_tree_skeleton(
+        st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
-        )  # noqa: E501
+        )
+        st.session_state.energy_plot = render.plotly_energy_module(
+            None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+        )
         st.session_state.env_wrapper = env_wrapper
