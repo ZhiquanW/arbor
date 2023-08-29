@@ -1,10 +1,13 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 
 import torch
 
 import utils
 import sim.aux_space as aux_space
 import sim.energy_module as e_module
+import random
+
+# change grow step to tree level
 
 
 class TorchArborEngine:
@@ -254,6 +257,19 @@ class TorchArborEngine:
             self.done = True
         return self.done
 
+    def step_energy(self) -> None:
+        if self.energy_module is not None:
+            energy_remained = self.energy_module.maintainence_consumption(
+                len(self.alive_nodes_idx[0])
+            )
+            if not energy_remained:
+                self.done = True
+
+        if self.energy_module is not None and self.shadow_space is not None:
+            self.energy_module.colelct_energy(
+                self.alive_nodes_position, self.shadow_space
+            )
+
     def get_active_nodes_idx(self) -> torch.Tensor:
         # node must exist, awake, alive and has remaining growth step
         return torch.where(
@@ -446,7 +462,7 @@ class TorchArborEngine:
             self.apical_nodes_state[local_branch_idx, 4] - 1
         )
         self.next_apical_nodes_state[start_idx:end_idx, 5:8] = self.apical_nodes_state[
-            local_branch_idx, 5:8
+            active_nodes_idx[local_branch_idx], 5:8
         ]
 
         self.next_apical_nodes_state[
@@ -474,3 +490,31 @@ class TorchArborEngine:
         self.next_apical_nodes_state[active_nodes_idx[local_sleep_idx], 2] = 0
         # return active nodex indx that are not slept by local sleep idx
         return active_nodes_idx[local_unsleep_idx]
+
+    def random_cut(self) -> None:
+        # select a random step before current step
+        # select a random branch idx at the current step
+        # set all branch to be not exist
+        # find child branch indices and set to not exist
+        # recurrsively
+        target_branch: int = random.randint(0, self.num_branches - 1)
+        start_step = random.randint(
+            int(self.branch_birth_hist[target_branch, 0]), self.steps
+        )
+        self.__dfs_cut(start_step, set([target_branch]))
+
+    def __dfs_cut(self, start_step, cut_branch_indices: Set) -> None:
+        cut_branch_indices = list(cut_branch_indices)
+        if len(cut_branch_indices) == 0:
+            return
+        self.nodes_state[start_step:, cut_branch_indices, 0] = 0
+        self.apical_nodes_state[cut_branch_indices, 0] = 0
+        child_indices = set()
+        for i in range(self.num_branches):
+            for j in range(start_step, self.steps + 1):
+                if (
+                    self.nodes_state[j, i, 0] == 1
+                    and self.nodes_state[j, i, 1] in cut_branch_indices
+                ):
+                    child_indices.add(i)
+        self.__dfs_cut(start_step, child_indices)

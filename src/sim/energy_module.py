@@ -5,29 +5,15 @@ import sim.aux_space as aux_space
 
 class EnergyHist:
     def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
         self.total_energys: List[float] = []
+        self.energy_balance: List[float] = [0]
         self.collected_energys: List[float] = []
         self.maintainence_consumptions: List[float] = []
         self.move_consumptions: List[float] = []
         self.branch_consumptions: List[float] = []
-
-    def reset(self) -> None:
-        self.total_energys: List[float] = []
-        self.maintainence_consumptions: List[float] = []
-        self.move_consumptions: List[float] = []
-        self.branch_consumptions: List[float] = []
-
-    # def append_total_energy(self, energy: float) -> None:
-    #     self.total_energys.append(energy)
-
-    # def append_maintainence_consumption(self, energy: float) -> None:
-    #     self.maintainence_consumptions.append(energy)
-
-    # def append_move_consumption(self, energy: float) -> None:
-    #     self.move_consumptions.append(energy)
-
-    # def append_branch_consumption(self, energy: float) -> None:
-    #     self.branch_consumptions.append(energy)
 
 
 class EnergyModule:
@@ -80,6 +66,8 @@ class EnergyModule:
         collected_energy = collection_ratio * energy_collection
         if self.energy_hist is not None:
             self.energy_hist.collected_energys.append(collected_energy)
+            self.energy_hist.energy_balance[-1] += collected_energy
+            self.energy_hist.energy_balance.append(0)
         self.total_energy += collected_energy
         self.total_energy = min(self.max_energy, self.total_energy)
         self.energy_hist.total_energys.append(self.total_energy)
@@ -90,6 +78,7 @@ class EnergyModule:
         )
         if self.energy_hist is not None:
             self.energy_hist.maintainence_consumptions.append(maintainence_consumption)
+            self.energy_hist.energy_balance[-1] -= maintainence_consumption
         self.total_energy -= maintainence_consumption
         if self.total_energy < 0:
             self.energy_hist.total_energys.append(self.total_energy)
@@ -101,6 +90,7 @@ class EnergyModule:
         self.total_energy -= move_consumption
         if self.energy_hist is not None:
             self.energy_hist.move_consumptions.append(move_consumption)
+            self.energy_hist.energy_balance[-1] -= move_consumption
         if self.total_energy < 0:
             self.energy_hist.total_energys.append(self.total_energy)
             return False
@@ -110,6 +100,7 @@ class EnergyModule:
         branch_consumption = self.branch_consumption_factor * num_new_branches
         if self.energy_hist is not None:
             self.energy_hist.branch_consumptions.append(branch_consumption)
+            self.energy_hist.energy_balance[-1] -= branch_consumption
         self.total_energy -= branch_consumption
         if self.total_energy < 0:
             self.energy_hist.total_energys.append(self.total_energy)

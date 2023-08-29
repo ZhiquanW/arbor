@@ -20,6 +20,8 @@ import streamlit
 def plotly_tree_skeleton(
     fig: Optional[plotly.graph_objs._figure.Figure],
     arbor_engine: arbor.TorchArborEngine,
+    shadow: bool = False,
+    occupancy: bool = False,
 ):
     if fig is None:
         fig = make_subplots(
@@ -29,7 +31,7 @@ def plotly_tree_skeleton(
             vertical_spacing=0.00,
         )
 
-    for v_idx in range(arbor_engine.max_branches_num):
+    for v_idx in range(arbor_engine.num_branches):
         born_step = int(arbor_engine.branch_birth_hist[v_idx])
         points_x = arbor_engine.nodes_state[
             born_step : arbor_engine.steps + 1, v_idx, 5
@@ -40,6 +42,25 @@ def plotly_tree_skeleton(
         points_z = arbor_engine.nodes_state[
             born_step : arbor_engine.steps + 1, v_idx, 7
         ]
+        no_existence_indices = torch.argwhere(
+            arbor_engine.nodes_state[born_step : arbor_engine.steps + 1, v_idx, 0] == 0
+        ).flatten()
+        if len(no_existence_indices.cpu().tolist()) > 0:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=points_x[no_existence_indices],
+                    y=points_y[no_existence_indices],
+                    z=points_z[no_existence_indices],
+                    mode="markers",
+                    marker=dict(
+                        size=12,
+                        color=(0, 0, 0),
+                    ),
+                    showlegend=False,
+                ),
+                row=2,
+                col=1,
+            )
         fig.add_trace(
             go.Scatter3d(
                 x=points_x,
@@ -54,7 +75,7 @@ def plotly_tree_skeleton(
             row=2,
             col=1,
         )
-    if arbor_engine.occupancy_space is not None:
+    if occupancy and arbor_engine.occupancy_space is not None:
         voxel_positions = arbor_engine.occupancy_space.get_occupied_voxel_positions()
         if voxel_positions is not None:
             fig.add_trace(
@@ -68,7 +89,7 @@ def plotly_tree_skeleton(
                 row=2,
                 col=1,
             )
-    if arbor_engine.shadow_space is not None:
+    if shadow and arbor_engine.shadow_space is not None:
         voxel_positions = arbor_engine.shadow_space.get_occupied_voxel_positions()
         xv, yv, zv = torch.where(arbor_engine.shadow_space.space > 0)
         if voxel_positions is not None:
@@ -171,52 +192,72 @@ def plotly_tree_skeleton(
             row=1,
             col=1,
         )
+        fig.add_trace(
+            go.Scatter(
+                x=plot_x,
+                y=arbor_engine.energy_module.energy_hist.energy_balance,
+                mode="lines+markers",
+                name="energy balance",
+            ),
+            row=1,
+            col=1,
+        )
     return fig
 
 
 def plotly_energy_module(
     fig: Optional[plotly.graph_objs._figure.Figure], energy_hist: energy.EnergyHist
 ):
+    print("plotly_energy_module")
     if fig is None:
         fig = go.Figure()
 
-    plot_x = list(range(len(energy_hist.total_energys)))
-    fig.add_trace(
-        go.Scatter(
-            x=plot_x,
-            y=energy_hist.total_energys,
-            mode="lines+markers",
-            name="total energys",
-        )
-    )
+    # plot_x = list(range(len(energy_hist.total_energys)))
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=plot_x,
+    #         y=energy_hist.total_energys,
+    #         mode="lines+markers",
+    #         name="total energys",
+    #     )
+    # )
 
-    fig.add_trace(
-        go.Scatter(
-            x=plot_x,
-            y=energy_hist.maintainence_consumptions,
-            mode="lines+markers",
-            name="maintainence consumptions",
-        )
-    )
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=plot_x,
+    #         y=energy_hist.maintainence_consumptions,
+    #         mode="lines+markers",
+    #         name="maintainence consumptions",
+    #     )
+    # )
 
-    fig.add_trace(
-        go.Scatter(
-            x=plot_x,
-            y=energy_hist.move_consumptions,
-            mode="lines+markers",
-            name="move consumptions",
-        )
-    )
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=plot_x,
+    #         y=energy_hist.move_consumptions,
+    #         mode="lines+markers",
+    #         name="move consumptions",
+    #     )
+    # )
 
-    fig.add_trace(
-        go.Scatter(
-            x=plot_x,
-            y=energy_hist.branch_consumptions,
-            mode="lines+markers",
-            name="branch consumptions",
-        )
-    )
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=plot_x,
+    #         y=energy_hist.branch_consumptions,
+    #         mode="lines+markers",
+    #         name="branch consumptions",
+    #     )
+    # )
 
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=plot_x,
+    #         y=energy_hist.energy_balance,
+    #         mode="lines+markers",
+    #         name="energy balance",
+    #     )
+    # )
+    print("return")
     return fig
 
 

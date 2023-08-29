@@ -23,26 +23,29 @@ class Starbor:
 
     def launch(self):
         self.__init_gui()
-        if "env_wrapper" not in st.session_state:
+        if "env_wrapper" not in st.session_state:  # type: ignore
             self.reset()
 
     def __init_gui(self):
         st.set_page_config(layout="wide")
         button_cols = st.sidebar.columns(
-            3,
+            5,
         )
         with button_cols[0]:
             if st.button("Reset"):
-                st.write("Reset")
                 self.reset()
         with button_cols[1]:
             if st.button("Step"):
-                st.write("Step")
                 self.step()
         with button_cols[2]:
             if st.button("Grow"):
-                st.write("Grow")
                 self.grow()
+        with button_cols[3]:
+            if st.button("Cut"):
+                self.cut()
+        with button_cols[4]:
+            if st.button("Stay"):
+                self.stay()
         with st.sidebar:
             st.session_state.max_steps = st.number_input(
                 "Max Grow Steps", value=20, min_value=1, step=1
@@ -296,14 +299,14 @@ class Starbor:
         env_wrapper = st.session_state.env_wrapper
         while True:
             _, _, done, _ = env_wrapper.step(env_wrapper.sample_action())
-            st.session_state.energy_plot = render.plotly_energy_module(
-                None, env_wrapper.env.arbor_engine.energy_module.energy_hist
-            )
             if done:
                 break
         st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
         )
+        # st.session_state.energy_plot = render.plotly_energy_module(
+        #     None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+        # )
 
     def reset(self) -> None:
         self.__init_engine()
@@ -318,7 +321,28 @@ class Starbor:
         st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
         )
-        st.session_state.energy_plot = render.plotly_energy_module(
-            None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+        # st.session_state.energy_plot = render.plotly_energy_module(
+        #     None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+        # )
+        st.session_state.env_wrapper = env_wrapper
+
+    def cut(self) -> None:
+        env_wrapper = st.session_state.env_wrapper
+        env_wrapper.env.arbor_engine.random_cut()
+        st.session_state.env_wrapper = env_wrapper
+        st.session_state.tree_plot = render.plotly_tree_skeleton(
+            None, env_wrapper.env.arbor_engine, shadow=False, occupancy=False
         )
+
+    def stay(self) -> None:
+        env_wrapper = st.session_state.env_wrapper
+        if env_wrapper.env.arbor_engine.done:
+            return
+        env_wrapper.env.arbor_engine.step_energy()
+        st.session_state.tree_plot = render.plotly_tree_skeleton(
+            None, env_wrapper.env.arbor_engine
+        )
+        # st.session_state.energy_plot = render.plotly_energy_module(
+        #     None, env_wrapper.env.arbor_engine.energy_module.energy_hist
+        # )
         st.session_state.env_wrapper = env_wrapper
