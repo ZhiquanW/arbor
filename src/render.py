@@ -1,3 +1,4 @@
+import random
 from matplotlib.collections import PathCollection
 import matplotlib.pyplot as plt
 from matplotlib import axes
@@ -48,15 +49,15 @@ def plotly_tree_skeleton(
         if len(no_existence_indices.cpu().tolist()) > 0:
             fig.add_trace(
                 go.Scatter3d(
-                    x=points_x[no_existence_indices],
-                    y=points_y[no_existence_indices],
-                    z=points_z[no_existence_indices],
+                    x=points_x[no_existence_indices] + random.random() * 0.01,
+                    y=points_y[no_existence_indices] + random.random() * 0.01,
+                    z=points_z[no_existence_indices] + random.random() * 0.01,
                     mode="markers",
                     marker=dict(
                         size=12,
-                        color=(0, 0, 0),
+                        color="rgb(255, 0, 0)",
                     ),
-                    showlegend=False,
+                    showlegend=True,
                 ),
                 row=2,
                 col=1,
@@ -67,9 +68,7 @@ def plotly_tree_skeleton(
                 y=points_y,
                 z=points_z,
                 marker_size=3,
-                line=dict(
-                    width=7,
-                ),
+                line=dict(width=7, color="rgb(0,176,246)"),
                 showlegend=False,
             ),
             row=2,

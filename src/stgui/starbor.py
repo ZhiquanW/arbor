@@ -28,24 +28,29 @@ class Starbor:
 
     def __init_gui(self):
         st.set_page_config(layout="wide")
-        button_cols = st.sidebar.columns(
-            5,
+        button_row0_cols = st.sidebar.columns(
+            3,
         )
-        with button_cols[0]:
+        with button_row0_cols[0]:
             if st.button("Reset"):
                 self.reset()
-        with button_cols[1]:
-            if st.button("Step"):
-                self.step()
-        with button_cols[2]:
+        with button_row0_cols[1]:
             if st.button("Grow"):
                 self.grow()
-        with button_cols[3]:
+        with button_row0_cols[2]:
             if st.button("Cut"):
                 self.cut()
-        with button_cols[4]:
+        button_row1_cols = st.sidebar.columns(3)
+        with button_row1_cols[0]:
+            if st.button("Step"):
+                self.step()
+        with button_row1_cols[1]:
             if st.button("Stay"):
                 self.stay()
+        with button_row1_cols[2]:
+            st.session_state.stay_step_num = st.number_input(
+                "Stay Step Num", value=1, min_value=1, step=1
+            )
         with st.sidebar:
             st.session_state.max_steps = st.number_input(
                 "Max Grow Steps", value=20, min_value=1, step=1
@@ -317,13 +322,10 @@ class Starbor:
         env_wrapper = st.session_state.env_wrapper
         if env_wrapper.env.arbor_engine.done:
             return
-        env_wrapper.step(env_wrapper.sample_action())
+        env_wrapper.step()
         st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
         )
-        # st.session_state.energy_plot = render.plotly_energy_module(
-        #     None, env_wrapper.env.arbor_engine.energy_module.energy_hist
-        # )
         st.session_state.env_wrapper = env_wrapper
 
     def cut(self) -> None:
@@ -338,7 +340,8 @@ class Starbor:
         env_wrapper = st.session_state.env_wrapper
         if env_wrapper.env.arbor_engine.done:
             return
-        env_wrapper.env.arbor_engine.step_energy()
+        for _ in range(st.session_state.stay_step_num):
+            env_wrapper.env.arbor_engine.step_energy()
         st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
         )

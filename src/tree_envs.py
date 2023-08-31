@@ -29,14 +29,16 @@ class CoreTorchEnv(BaseEnvTrait):
     def __init__(
         self,
         arbor_engine: arbor.TorchArborEngine,
+        branch_prob_offset: float = 0.1,
     ) -> None:
         super().__init__()
         self.arbor_engine = arbor_engine
+        self.__branch_prob_offset = branch_prob_offset
 
     @property
     def action_dim(self):
         # shape (max_apical_nodes, move_distance(1)+delta_rot(3)+branch_prob(1)+sleep_prob(1))
-        return (self.arbor_engine.max_branches_num * 6, 0)
+        return (2,)
 
     @property
     def observation_dim(self):
@@ -57,6 +59,8 @@ class CoreTorchEnv(BaseEnvTrait):
         self.arbor_engine.reset()
 
     def step(self, action: torch.Tensor):
+        assert action.shape == self.action_dim
+        self.arbor_engine.node_branch_prob_range += action
         done = self.arbor_engine.step(action=action)
         reward = 0
         return {}, reward, done, {}
@@ -65,151 +69,145 @@ class CoreTorchEnv(BaseEnvTrait):
         raise NotImplementedError
 
     def sample_action(self):
-        return (
-            torch.rand(
-                self.arbor_engine.max_branches_num * 6, device=self.arbor_engine.device
-            )
-            * 2
-            - 1
-        )
+        return (torch.rand(self.action_dim) * 2 - 1) * self.__branch_prob_offset
 
     def destory(self):
         return
 
 
-class CoreTreeEnv(BaseEnvTrait):
-    def __init__(
-        self,
-        *,
-        max_grow_steps: int,
-        max_outer_nodes_num: int,
-        num_growth_per_node: int,
-        init_dis: float,
-        delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
-        delta_rotate_range: np.ndarray[int, np.dtype[np.float64]],
-        init_branch_rot: float,
-        branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
-        branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
-        sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
-        collision_space_interval: float,
-        collision_space_half_size: int,
-        shadow_space_interval: float,
-        shadow_space_half_size: int,
-        shadow_pyramid_half_size: int,
-        delta_shadow_value: float,
-        energy_mode: core.EnergyMode,
-        init_energy: float,
-        max_energy: float,
-        init_energy_collection_rate: float,
-        energy_collection_rate_decay: core.EnergyCollectionDecay,
-        node_moving_consumption_factor: float,
-        node_generation_consumption: float,
-        node_maintainence_consumption: float,
-    ) -> None:
-        super().__init__()
-        self.arbor_engine: core.ArborEngine = core.ArborEngine(
-            max_grow_steps=max_grow_steps,
-            max_outer_node_num=max_outer_nodes_num,
-            num_growth_per_bud=num_growth_per_node,
-            init_dis=init_dis,
-            delta_dis_range=delta_dis_range,
-            delta_rotate_range=delta_rotate_range,
-            init_branch_rot=init_branch_rot,
-            branch_rot_range=branch_rot_range,
-            branch_prob_range=branch_prob_range,
-            sleep_prob_range=sleep_prob_range,
-            collicollision_space_intervalsion_space_interval=collision_space_interval,
-            collision_space_half_size=collision_space_half_size,
-            shadow_space_interval=shadow_space_interval,
-            shadow_space_half_size=shadow_space_half_size,
-            shadow_pyramid_half_size=shadow_pyramid_half_size,
-            delta_shadow_value=delta_shadow_value,
-            energy_mode=energy_mode,
-            init_energy=init_energy,
-            max_energy=max_energy,
-            init_energy_collection_rate=init_energy_collection_rate,
-            energy_collection_rate_decay=energy_collection_rate_decay,
-            node_moving_consumption_factor=node_moving_consumption_factor,
-            node_generation_consumption=node_generation_consumption,
-            node_maintainence_consumption=node_maintainence_consumption,
-        )
-        self.voxel_space_interval = collision_space_interval
-        self.voxel_space_half_size = collision_space_half_size
-        # plot variables
-        self.matplot_figure: Optional[matplotlib.figure.Figure] = None
-        self.plotly_figure: Optional[plotly.graph_objs._figure.Figure] = None
-        # reward weights
-        self.w_height = 1
-        self.w_branch_dir = 1
-        self.w_collision = -1
-        self.w_light = 1
+# class CoreTreeEnv(BaseEnvTrait):
+#     def __init__(
+#         self,
+#         *,
+#         max_grow_steps: int,
+#         max_outer_nodes_num: int,
+#         num_growth_per_node: int,
+#         init_dis: float,
+#         delta_dis_range: np.ndarray[int, np.dtype[np.float64]],
+#         delta_rotate_range: np.ndarray[int, np.dtype[np.float64]],
+#         init_branch_rot: float,
+#         branch_rot_range: np.ndarray[int, np.dtype[np.float64]],
+#         branch_prob_range: np.ndarray[int, np.dtype[np.float64]],
+#         sleep_prob_range: np.ndarray[int, np.dtype[np.float64]],
+#         collision_space_interval: float,
+#         collision_space_half_size: int,
+#         shadow_space_interval: float,
+#         shadow_space_half_size: int,
+#         shadow_pyramid_half_size: int,
+#         delta_shadow_value: float,
+#         energy_mode: core.EnergyMode,
+#         init_energy: float,
+#         max_energy: float,
+#         init_energy_collection_rate: float,
+#         energy_collection_rate_decay: core.EnergyCollectionDecay,
+#         node_moving_consumption_factor: float,
+#         node_generation_consumption: float,
+#         node_maintainence_consumption: float,
+#     ) -> None:
+#         super().__init__()
+#         self.arbor_engine: core.ArborEngine = core.ArborEngine(
+#             max_grow_steps=max_grow_steps,
+#             max_outer_node_num=max_outer_nodes_num,
+#             num_growth_per_bud=num_growth_per_node,
+#             init_dis=init_dis,
+#             delta_dis_range=delta_dis_range,
+#             delta_rotate_range=delta_rotate_range,
+#             init_branch_rot=init_branch_rot,
+#             branch_rot_range=branch_rot_range,
+#             branch_prob_range=branch_prob_range,
+#             sleep_prob_range=sleep_prob_range,
+#             collicollision_space_intervalsion_space_interval=collision_space_interval,
+#             collision_space_half_size=collision_space_half_size,
+#             shadow_space_interval=shadow_space_interval,
+#             shadow_space_half_size=shadow_space_half_size,
+#             shadow_pyramid_half_size=shadow_pyramid_half_size,
+#             delta_shadow_value=delta_shadow_value,
+#             energy_mode=energy_mode,
+#             init_energy=init_energy,
+#             max_energy=max_energy,
+#             init_energy_collection_rate=init_energy_collection_rate,
+#             energy_collection_rate_decay=energy_collection_rate_decay,
+#             node_moving_consumption_factor=node_moving_consumption_factor,
+#             node_generation_consumption=node_generation_consumption,
+#             node_maintainence_consumption=node_maintainence_consumption,
+#         )
+#         self.voxel_space_interval = collision_space_interval
+#         self.voxel_space_half_size = collision_space_half_size
+#         # plot variables
+#         self.matplot_figure: Optional[matplotlib.figure.Figure] = None
+#         self.plotly_figure: Optional[plotly.graph_objs._figure.Figure] = None
+#         # reward weights
+#         self.w_height = 1
+#         self.w_branch_dir = 1
+#         self.w_collision = -1
+#         self.w_light = 1
 
-    @property
-    def action_dim(self) -> tuple:
-        return self.arbor_engine.action_dim
+#     @property
+#     def action_dim(self) -> tuple:
+#         return self.arbor_engine.action_dim
 
-    @property
-    def observation_dim(self) -> tuple:
-        return self.arbor_engine.observation_dim
+#     @property
+#     def observation_dim(self) -> tuple:
+#         return self.arbor_engine.observation_dim
 
-    @property
-    def action_n(self) -> int:
-        return 0
+#     @property
+#     def action_n(self) -> int:
+#         return 0
 
-    @property
-    def renderable(self) -> bool:
-        return self.matplot_figure is not None or self.plotly_figure is not None
+#     @property
+#     def renderable(self) -> bool:
+#         return self.matplot_figure is not None or self.plotly_figure is not None
 
-    def awake(self):
-        pass
+#     def awake(self):
+#         pass
 
-    def reset(self):
-        self.arbor_engine.reset()
+#     def reset(self):
+#         self.arbor_engine.reset()
 
-    def destory(self):
-        if self.renderable:
-            plt.close(self.f)  # type: ignore
+#     def destory(self):
+#         if self.renderable:
+#             plt.close(self.f)  # type: ignore
 
-    def sample_action(self) -> np.ndarray:
-        return self.arbor_engine.sample_action()
+#     def sample_action(self) -> np.ndarray:
+#         return self.arbor_engine.sample_action()
 
-    def step(self, action: np.ndarray):
-        done = self.arbor_engine.step(action=action)
-        reward = self.__compute_reward()
-        return {}, reward, done, {}
+#     def step(self, action: np.ndarray):
+#         done = self.arbor_engine.step(action=action)
+#         reward = self.__compute_reward()
+#         return {}, reward, done, {}
 
-    def __compute_reward(self):
-        return 0
+#     def __compute_reward(self):
+#         return 0
 
-    def matplot_render(self):
-        if self.matplot_figure is None:
-            self.matplot_figure: Optional[matplotlib.figure.Figure] = plt.figure()
-            self.tree_axes: plt.Axes = self.matplot_figure.add_subplot(131, projection="3d")  # type: ignore
-            self.collision_axes: plt.Axes = self.matplot_figure.add_subplot(132, projection="3d")  # type: ignore
-            self.shadow_axes: plt.Axes = self.matplot_figure.add_subplot(133, projection="3d")  # type: ignore
-        self.arbor_engine.matplot_tree(self.tree_axes)
-        self.arbor_engine.matplot_collision(self.collision_axes)
-        self.arbor_engine.matplot_shadow(self.shadow_axes)
-        plt.pause(0.01)
+#     def matplot_render(self):
+#         if self.matplot_figure is None:
+#             self.matplot_figure: Optional[matplotlib.figure.Figure] = plt.figure()
+#             self.tree_axes: plt.Axes = self.matplot_figure.add_subplot(131, projection="3d")  # type: ignore
+#             self.collision_axes: plt.Axes = self.matplot_figure.add_subplot(132, projection="3d")  # type: ignore
+#             self.shadow_axes: plt.Axes = self.matplot_figure.add_subplot(133, projection="3d")  # type: ignore
+#         self.arbor_engine.matplot_tree(self.tree_axes)
+#         self.arbor_engine.matplot_collision(self.collision_axes)
+#         self.arbor_engine.matplot_shadow(self.shadow_axes)
+#         plt.pause(0.01)
 
-    def plotly_render(self):
-        if self.plotly_figure is None:
-            self.plotly_figure: Optional[
-                plotly.graph_objs._figure.Figure
-            ] = make_subplots(
-                rows=3,
-                cols=1,
-                specs=[[{"type": "Scatter3d"}]] * 3,
-            )
-        self.arbor_engine.plotly_tree(self.plotly_figure)
-        self.arbor_engine.plotly_collision(self.plotly_figure)
-        self.arbor_engine.plotly_shadow(self.plotly_figure)
-        # tight layout
-        self.plotly_figure.update_layout(margin=dict(l=0, r=0, b=0, t=20), height=4096)
-        self.plotly_figure.show()
+#     def plotly_render(self):
+#         if self.plotly_figure is None:
+#             self.plotly_figure: Optional[
+#                 plotly.graph_objs._figure.Figure
+#             ] = make_subplots(
+#                 rows=3,
+#                 cols=1,
+#                 specs=[[{"type": "Scatter3d"}]] * 3,
+#             )
+#         self.arbor_engine.plotly_tree(self.plotly_figure)
+#         self.arbor_engine.plotly_collision(self.plotly_figure)
+#         self.arbor_engine.plotly_shadow(self.plotly_figure)
+#         # tight layout
+#         self.plotly_figure.update_layout(margin=dict(l=0, r=0, b=0, t=20), height=4096)
+#         self.plotly_figure.show()
 
-    def render(self):
-        self.plotly_render()
+#     def render(self):
+#         self.plotly_render()
 
 
 class PolyLineTreeEnv(BaseEnvTrait):

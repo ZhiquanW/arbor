@@ -13,13 +13,13 @@ import random
 class TorchArborEngine:
     def __init__(
         self,
-        max_steps: int,
-        max_branches_num: int,
-        move_dis_range: List[float],
-        move_rot_range: List[List[float]],
-        new_branch_rot_range: List[float],
-        node_branch_prob_range: List[float],
-        node_sleep_prob_range: List[float],
+        max_steps: int = 20,
+        max_branches_num: int = 50,
+        move_dis_range: List[float] = [0.3, 0.5],
+        move_rot_range: List[List[float]] = [[-10, 10], [-30, 30], [-10, 10]],
+        new_branch_rot_range: List[float] = [0, 30],
+        node_branch_prob_range: List[float] = [0.1, 0.5],
+        node_sleep_prob_range: List[float] = [0.001, 0.1],
         occupancy_space: Optional[aux_space.TorchOccupancySpace] = None,
         shadow_space: Optional[aux_space.TorchShadowSpace] = None,
         energy_module: Optional[e_module.EnergyModule] = None,
@@ -72,10 +72,12 @@ class TorchArborEngine:
         assert self.new_branch_rot_range[0] >= 0
         assert self.new_branch_rot_range[0] < self.new_branch_rot_range[1]
         # the probability of a node branchs at each step
-        self.node_branch_prob_range: List[float] = node_branch_prob_range
+        self.node_branch_prob_range: torch.Tensor = torch.tensor(
+            node_branch_prob_range, dtype=torch.float32, device=device
+        )
         assert len(self.node_branch_prob_range) == 2
         assert self.node_branch_prob_range[0] >= 0
-        assert self.node_branch_prob_range[0] < self.node_branch_prob_range[1]
+        assert self.node_branch_prob_range[0] <= self.node_branch_prob_range[1]
         self.node_sleep_prob_range: List[float] = node_sleep_prob_range
         assert len(self.node_sleep_prob_range) == 2
         assert self.node_sleep_prob_range[0] >= 0
@@ -85,8 +87,6 @@ class TorchArborEngine:
         self.occupancy_space: Optional[aux_space.TorchOccupancySpace] = occupancy_space
         self.shadow_space: Optional[aux_space.TorchShadowSpace] = shadow_space
         self.energy_module: Optional[e_module.EnergyModule] = energy_module
-        # init variables via variables
-        # self.reset()
 
     @property
     def action_dim(self) -> Tuple[int]:
@@ -178,6 +178,9 @@ class TorchArborEngine:
         self.__reset_sim_vriable()
         self.__reset_tree_variables()
 
+    def __sample_action(self):
+        return torch.rand(self.max_branches_num * 6, device=self.device) * 2 - 1
+
     def step(self, action: torch.Tensor) -> bool:
         """
         perform a step of growth of the tree
@@ -202,10 +205,8 @@ class TorchArborEngine:
         (all data will be stored in the member variables)
         """
         #################### sanity check: input ####################
-        assert (
-            action.shape == self.action_dim
-        ), f"action dim: {self.action_dim} is expected, given f{action.shape}"
-        action = action.view(self.max_branches_num, 6).clip(-1, 1)
+        normalized_action = self.__sample_action()
+        action = normalized_action.view(self.max_branches_num, 6).clip(-1, 1)
         active_nodes_idx = self.get_active_nodes_idx()
         num_active_nodes = len(active_nodes_idx)
         if num_active_nodes == 0:
@@ -503,18 +504,18 @@ class TorchArborEngine:
         )
         self.__dfs_cut(start_step, set([target_branch]))
 
-    def __dfs_cut(self, start_step, cut_branch_indices: Set) -> None:
-        cut_branch_indices = list(cut_branch_indices)
-        if len(cut_branch_indices) == 0:
+    def __dfs_cut(self, start_step, cut_branch_indices_set: Set) -> None:
+        cut_branch_indices_list: List = list(cut_branch_indices_set)
+        if len(cut_branch_indices_list) == 0:
             return
-        self.nodes_state[start_step:, cut_branch_indices, 0] = 0
-        self.apical_nodes_state[cut_branch_indices, 0] = 0
+        self.nodes_state[start_step:, cut_branch_indices_list, 0] = 0
+        self.apical_nodes_state[cut_branch_indices_list, 0] = 0
         child_indices = set()
         for i in range(self.num_branches):
             for j in range(start_step, self.steps + 1):
                 if (
                     self.nodes_state[j, i, 0] == 1
-                    and self.nodes_state[j, i, 1] in cut_branch_indices
+                    and self.nodes_state[j, i, 1] in cut_branch_indices_list
                 ):
                     child_indices.add(i)
         self.__dfs_cut(start_step, child_indices)
