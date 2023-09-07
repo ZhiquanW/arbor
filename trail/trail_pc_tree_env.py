@@ -10,7 +10,7 @@ import rlvortex
 
 import core
 
-import pc_tree_env
+import envs.pc_tree_env as pc_tree_env
 
 random.seed(11)
 np.random.seed(11)

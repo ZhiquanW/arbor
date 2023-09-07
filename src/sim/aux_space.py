@@ -84,7 +84,9 @@ class TorchVoxelSpace:
         assert torch.all(voxel_indices >= 0) and torch.all(
             voxel_indices < self.space_half_size * 2
         ), (
-            f"[TorchOccupancySpace] position outside occupancy voxel space: {self.space_half_size}\n"  # noqa: E501
+            f"[TorchOccupancySpace] position outside occupancy voxel space:\n"
+            f"[TorchOccupancySpace] voxel space half size: {self.space_half_size}\n"  # noqa: E501
+            f"[TorchOccupancySpace] voexl size: {self.voxel_size}\n"  # noqa: E501
             f"voxel indices: {voxel_indices}\n"
             f"voxel positions: {positions}"
         )
@@ -117,7 +119,10 @@ class TorchVoxelSpace:
 
 class TorchOccupancySpace(TorchVoxelSpace):
     def __init__(
-        self, voxel_size: float, space_half_size: int, device: torch.device
+        self,
+        voxel_size: float = 0.2,
+        space_half_size: int = 50,
+        device: torch.device = torch.device("cpu"),
     ) -> None:
         """
         the occupancy space is a 3D voxel space use to represent the occupancy of the tree nodes.
@@ -142,17 +147,18 @@ class TorchOccupancySpace(TorchVoxelSpace):
         """
         assert positions.shape[1] == 3, "positions should be a tensor of shape (N,3)"
         voxel_indices = self.positions_to_voxels_idx(positions).transpose(0, 1)
+        voxel_indices = voxel_indices.type(torch.long)
         self.space[tuple(voxel_indices)] = 1
 
 
 class TorchShadowSpace(TorchVoxelSpace):
     def __init__(
         self,
-        voxel_size: float,
-        space_half_size: int,
-        pyramid_half_size: int,
-        shadow_delta: float,
-        device: torch.device,
+        voxel_size: float = 0.2,
+        space_half_size: int = 50,
+        pyramid_half_size: int = 5,
+        shadow_delta: float = 0.1,
+        device: torch.device = torch.device("cpu"),
     ) -> None:
         """
         the shadow space is a 3D voxel space use to represent the shadow of the tree nodes.

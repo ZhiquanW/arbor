@@ -1,7 +1,7 @@
 # buit-in import
 import io
 import os
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 from time import gmtime, strftime
 import random
 from matplotlib import cm
@@ -19,13 +19,16 @@ from plotly.subplots import make_subplots
 import tqdm
 
 # project package import
-import utils
+import utils.utils as utils
 
-import core
 import sim.torch_arbor as arbor
 
 
-class CoreTorchEnv(BaseEnvTrait):
+class BranchProbArborEnv(BaseEnvTrait):
+    """
+    this environment use branch probability as action
+    """
+
     def __init__(
         self,
         arbor_engine: arbor.TorchArborEngine,
@@ -37,12 +40,18 @@ class CoreTorchEnv(BaseEnvTrait):
 
     @property
     def action_dim(self):
-        # shape (max_apical_nodes, move_distance(1)+delta_rot(3)+branch_prob(1)+sleep_prob(1))
+        """
+        the action is the branch probability offset for the lower and upper bound of the branch probability
+        """
         return (2,)
 
     @property
     def observation_dim(self):
-        return self.arbor_engine.nodes_state.shape
+        return (
+            (self.arbor_engine.max_steps + 1)
+            * self.arbor_engine.max_branches_num
+            * self.arbor_engine.NUM_NODE_FEATS,
+        )
 
     @property
     def action_n(self):
@@ -53,17 +62,27 @@ class CoreTorchEnv(BaseEnvTrait):
         return False
 
     def awake(self):
-        pass
+        return self
 
-    def reset(self):
+    def reset(self) -> Tuple[torch.Tensor, Dict]:
         self.arbor_engine.reset()
+        return self.arbor_engine.nodes_state.flatten(), {}
 
     def step(self, action: torch.Tensor):
         assert action.shape == self.action_dim
+        action = torch.clip(action, -1, 1) * self.__branch_prob_offset
         self.arbor_engine.node_branch_prob_range += action
         done = self.arbor_engine.step(action=action)
-        reward = 0
-        return {}, reward, done, {}
+        assert (
+            self.arbor_engine.energy_module is not None
+        ), "BranchProbArborEnv must have energy module in arbor engine"
+        reward = self.arbor_engine.energy_module.total_energy
+        return (
+            self.arbor_engine.nodes_state.flatten(),
+            reward,
+            done,
+            {},
+        )
 
     def render(self):
         raise NotImplementedError

@@ -12,11 +12,11 @@ import plotly.graph_objects as go
 import rlvortex.envs.base_env as base_env
 import rlvortex
 
-import utils
-import tree_envs
+import utils.utils as utils
+import envs.tree_envs as tree_envs
 import sim.torch_arbor as arbor
 import torch
-import render
+import utils.render as render
 
 random.seed(11)
 
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         device=torch.device("cpu"),
     )
     env_wrapper: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
-        env=tree_envs.CoreTorchEnv(arbor_engine=arbor)
+        env=tree_envs.BranchProbArborEnv(arbor_engine=arbor)
     )
     env_wrapper.awake()
     env_wrapper.reset()

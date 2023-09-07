@@ -24,7 +24,7 @@ import rlvortex
 import rlvortex.envs.base_env as base_env
 
 # core imports
-import tree_envs
+import envs.tree_envs as tree_envs
 import random
 import torch.nn as nn
 

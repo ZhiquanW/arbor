@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import torch
 import sim.aux_space as aux_space
 
@@ -19,14 +19,14 @@ class EnergyHist:
 class EnergyModule:
     def __init__(
         self,
-        init_energy: float,
-        max_energy: float,
-        collection_voxel_half_size: int,
-        init_collection_ratio: float,
-        maintainence_consumption_factor: float,
-        move_consumption_factor: float,
-        branch_consumption_factor: float,
-        record: bool = False,
+        init_energy: float = 10.0,
+        max_energy: float = 100.0,
+        collection_voxel_half_size: int = 4,
+        init_collection_ratio: float = 0.8,
+        maintainence_consumption_factor: float = 0.1,
+        move_consumption_factor: float = 0.5,
+        branch_consumption_factor: float = 1.0,
+        record_history: bool = False,
     ) -> None:
         self.max_energy: float = max_energy
         self.collection_voxel_half_size = collection_voxel_half_size
@@ -35,8 +35,9 @@ class EnergyModule:
         self.move_consumption_factor: float = move_consumption_factor
         self.branch_consumption_factor: float = branch_consumption_factor
         self.total_energy: float = init_energy
-        if record:
-            self.energy_hist: EnergyHist = EnergyHist()
+        self.energy_hist: Optional[EnergyHist] = (
+            EnergyHist() if record_history else None
+        )
 
     def colelct_energy(
         self, nodes_position: torch.Tensor, shadow_space: aux_space.TorchShadowSpace
@@ -70,7 +71,8 @@ class EnergyModule:
             self.energy_hist.energy_balance.append(0)
         self.total_energy += collected_energy
         self.total_energy = min(self.max_energy, self.total_energy)
-        self.energy_hist.total_energys.append(self.total_energy)
+        if self.energy_hist is not None:
+            self.energy_hist.total_energys.append(self.total_energy)
 
     def maintainence_consumption(self, num_active_nodes: int) -> bool:
         maintainence_consumption = (
@@ -80,7 +82,7 @@ class EnergyModule:
             self.energy_hist.maintainence_consumptions.append(maintainence_consumption)
             self.energy_hist.energy_balance[-1] -= maintainence_consumption
         self.total_energy -= maintainence_consumption
-        if self.total_energy < 0:
+        if self.total_energy < 0 and self.energy_hist is not None:
             self.energy_hist.total_energys.append(self.total_energy)
             return False
         return True
@@ -91,7 +93,7 @@ class EnergyModule:
         if self.energy_hist is not None:
             self.energy_hist.move_consumptions.append(move_consumption)
             self.energy_hist.energy_balance[-1] -= move_consumption
-        if self.total_energy < 0:
+        if self.total_energy < 0 and self.energy_hist is not None:
             self.energy_hist.total_energys.append(self.total_energy)
             return False
         return True
@@ -102,7 +104,7 @@ class EnergyModule:
             self.energy_hist.branch_consumptions.append(branch_consumption)
             self.energy_hist.energy_balance[-1] -= branch_consumption
         self.total_energy -= branch_consumption
-        if self.total_energy < 0:
+        if self.total_energy < 0 and self.energy_hist is not None:
             self.energy_hist.total_energys.append(self.total_energy)
             return False
         return True

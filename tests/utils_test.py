@@ -5,8 +5,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/
 import numpy as np
 import rlvortex
 import rlvortex.envs.base_env as base_env
-import utils
-import tree_envs
+import utils.utils as utils
+import envs.tree_envs as tree_envs
 
 
 def test_unscale_scale_by_range():

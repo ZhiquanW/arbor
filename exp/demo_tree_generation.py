@@ -10,8 +10,8 @@ import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
 
-import tree_envs
-import utils
+import envs.tree_envs as tree_envs
+import utils.utils as utils
 import random
 
 random.seed(11)

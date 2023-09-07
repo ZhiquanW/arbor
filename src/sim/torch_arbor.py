@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple, Set
 
 import torch
 
-import utils
+import utils.utils as utils
 import sim.aux_space as aux_space
 import sim.energy_module as e_module
 import random
@@ -13,13 +13,14 @@ import random
 class TorchArborEngine:
     def __init__(
         self,
+        *,
         max_steps: int = 20,
         max_branches_num: int = 50,
         move_dis_range: List[float] = [0.3, 0.5],
-        move_rot_range: List[List[float]] = [[-10, 10], [-30, 30], [-10, 10]],
+        move_rot_range: List[List[float]] = [[-10, 10], [-10, 10], [-10, 10]],
         new_branch_rot_range: List[float] = [0, 30],
         node_branch_prob_range: List[float] = [0.1, 0.5],
-        node_sleep_prob_range: List[float] = [0.001, 0.1],
+        node_sleep_prob_range: List[float] = [0.001, 0.01],
         occupancy_space: Optional[aux_space.TorchOccupancySpace] = None,
         shadow_space: Optional[aux_space.TorchShadowSpace] = None,
         energy_module: Optional[e_module.EnergyModule] = None,
@@ -87,6 +88,8 @@ class TorchArborEngine:
         self.occupancy_space: Optional[aux_space.TorchOccupancySpace] = occupancy_space
         self.shadow_space: Optional[aux_space.TorchShadowSpace] = shadow_space
         self.energy_module: Optional[e_module.EnergyModule] = energy_module
+        # init the simulation variables
+        self.reset()
 
     @property
     def action_dim(self) -> Tuple[int]:

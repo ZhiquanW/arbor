@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import rlvortex.envs.base_env as base_env
 import rlvortex
-import tree_envs
+import envs.tree_envs as tree_envs
 import sim.torch_arbor as arbor
 import sim.aux_space as auxs_space
 import sim.energy_module as energy

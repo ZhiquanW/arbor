@@ -1,19 +1,14 @@
 # create conda environment as 
 # conda create -n arbor python=3.9
+.ONESHELL:
+
+SHELL = /bin/zsh
+CONDA_ACTIVATE = source $$(conda info --base)/etc/profile.d/conda.sh ; conda activate ; conda activate
+
 starbor:
-	streamlit run trail/trail_starbor.py
-dearbor:
-	python src/gui/dearbor.py
-# run the trail codes for CoreTreeEnv
-trail-core-tree[torch]:
-	@echo 'run trail-core-tree[torch]'
-	python trail/trail_torch_arbor.py
-trail-core-tree[local]:
-	@echo 'run trail-core-tree[local]'
-	python trail/trail_core_env.py
-trail-core-tree:
-	python trail/trail_core_env.py
+	streamlit run trail/trail_starbor.py --server.port=8080
 env:
+	$(CONDA_ACTIVATE) arbor
 	pip install -r requirements.txt
 test:
 	python tests/utils_test.py
@@ -21,10 +16,18 @@ exp:
 	python tests/exp.py
 easy:
 	python src/main.py
-trail-collision:
-	python trail/exp_collision.py
-trail-core:
-	python trail/trail_core.py
-# run the trail codes for point cloud tree env
-trail-pc_tree:
-	python trail/trail_pc_tree_env.py
+
+conda-activate:
+	$(CONDA_ACTIVATE) arbor
+trail-bp-tree: 
+	@echo "activate conda env"
+	$(CONDA_ACTIVATE) arbor
+	@echo "start trail-bp-tree"
+	python trail/trail_branch_prob_arbor_env.py
+	@echo "trail-bp-tree done"
+bp-trainer:
+	@echo "activate conda env"
+	$(CONDA_ACTIVATE) arbor
+	@echo "start trail-bp-tree"
+	python src/train/bp_trainer.py
+	@echo "trail-bp-tree done"

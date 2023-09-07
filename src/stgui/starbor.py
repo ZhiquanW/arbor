@@ -9,12 +9,12 @@ import rlvortex.envs.base_env as base_env
 import stgui.callbacks as callbacks
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../"))
-import tree_envs  # noqa: E402
+import envs.tree_envs as tree_envs  # noqa: E402
 import sim.torch_arbor as arbor  # noqa: E402
 import sim.aux_space as aux_space
 import sim.energy_module as energy
 
-import render
+import utils.render as render
 
 
 class Starbor:
@@ -270,7 +270,7 @@ class Starbor:
             maintainence_consumption_factor=st.session_state.maintainence_consumption_factor,
             move_consumption_factor=st.session_state.move_consumption_factor,
             branch_consumption_factor=st.session_state.branch_consumption_factor,
-            record=True,
+            record_history=True,
         )
         arbor_engine = arbor.TorchArborEngine(
             max_steps=int(st.session_state.max_steps),
@@ -293,7 +293,7 @@ class Starbor:
             device=torch.device("cpu"),
         )
         env_wrapper: base_env.BaseEnvTrait = rlvortex.envs.base_env.EnvWrapper(
-            env=tree_envs.CoreTorchEnv(arbor_engine=arbor_engine)
+            env=tree_envs.BranchProbArborEnv(arbor_engine=arbor_engine)
         )
         env_wrapper.awake()
         env_wrapper.reset()
