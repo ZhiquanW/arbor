@@ -26,7 +26,7 @@ class BranchProbEnvSpeedTestParams:
         env=env_fn(
             arbor_engine=arbor.TorchArborEngine(
                 move_dis_range=[0.05, 0.1],
-                max_steps=50,
+                max_steps=20,
                 occupancy_space=aux_space.TorchOccupancySpace(
                     space_half_size=50, device=device
                 ),
