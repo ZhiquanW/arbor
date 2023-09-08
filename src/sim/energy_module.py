@@ -28,6 +28,7 @@ class EnergyModule:
         branch_consumption_factor: float = 1.0,
         record_history: bool = False,
     ) -> None:
+        self.init_energy = init_energy
         self.max_energy: float = max_energy
         self.collection_voxel_half_size = collection_voxel_half_size
         self.init_collection_ratio: float = init_collection_ratio
@@ -38,6 +39,11 @@ class EnergyModule:
         self.energy_hist: Optional[EnergyHist] = (
             EnergyHist() if record_history else None
         )
+
+    def reset(self) -> None:
+        self.total_energy = self.init_energy
+        if self.energy_hist is not None:
+            self.energy_hist.reset()
 
     def colelct_energy(
         self, nodes_position: torch.Tensor, shadow_space: aux_space.TorchShadowSpace

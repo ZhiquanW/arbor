@@ -15,19 +15,33 @@ import sim.aux_space as aux_space
 import sim.energy_module as energy
 
 import utils.render as render
+import train.trainer_params as trainer_params
 
 
 class Starbor:
     def __init__(self) -> None:
-        pass
+        self.default_model_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "nn_models",
+            "trail_model.pth",
+        )
+        st.session_state.model = torch.load(self.default_model_path)
 
     def launch(self):
         self.__init_gui()
         if "env_wrapper" not in st.session_state:  # type: ignore
             self.reset()
 
+    def load_nn_model(self) -> None:
+        pass
+
     def __init_gui(self):
         st.set_page_config(layout="wide")
+        st.session_state.nn_model_checkbox = st.sidebar.checkbox("Enable NN Model Step")
+        st.session_state.uploaded_model = st.file_uploader("Choose a model")
+        if st.session_state.uploaded_model is not None:
+            st.session_state.model = torch.load(st.session_state.uploaded_model)
+
         button_row0_cols = st.sidebar.columns(
             3,
         )
@@ -296,14 +310,20 @@ class Starbor:
             env=tree_envs.BranchProbArborEnv(arbor_engine=arbor_engine)
         )
         env_wrapper.awake()
-        env_wrapper.reset()
+        st.session_state.obs, _ = env_wrapper.reset()
         st.session_state.env_wrapper = env_wrapper
 
     def grow(self) -> None:
         self.__init_engine()
         env_wrapper = st.session_state.env_wrapper
+        o, _ = env_wrapper.reset()
         while True:
-            _, _, done, _ = env_wrapper.step(env_wrapper.sample_action())
+            action = (
+                st.session_state.model.act(st.session_state.obs)
+                if st.session_state.nn_model_checkbox
+                else env_wrapper.sample_action()
+            )
+            st.session_state.obs, _, done, _ = env_wrapper.step(action)
             if done:
                 break
         st.session_state.tree_plot = render.plotly_tree_skeleton(
@@ -322,7 +342,12 @@ class Starbor:
         env_wrapper = st.session_state.env_wrapper
         if env_wrapper.env.arbor_engine.done:
             return
-        env_wrapper.step()
+        action = (
+            st.session_state.model.act(st.session_state.obs)
+            if st.session_state.nn_model_checkbox
+            else env_wrapper.sample_action()
+        )
+        st.session_state.obs, _, done, _ = env_wrapper.step(action)
         st.session_state.tree_plot = render.plotly_tree_skeleton(
             None, env_wrapper.env.arbor_engine
         )

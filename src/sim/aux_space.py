@@ -63,9 +63,9 @@ class TorchVoxelSpace:
     def clear(self) -> None:
         self.space: torch.Tensor = torch.zeros(
             (
-                self.space_half_size * 2,
-                self.space_half_size * 2,
-                self.space_half_size * 2,
+                self.space_padded_half_size * 2,
+                self.space_padded_half_size * 2,
+                self.space_padded_half_size * 2,
             ),
             dtype=torch.float,
             device=self.device,
@@ -78,15 +78,21 @@ class TorchVoxelSpace:
             positions: the positions of the entity
         """
         assert positions.shape[1] == 3, "positions should be a tensor of shape (N,3)"
+        space_bound = self.voxel_size * self.space_half_size
+        positions = positions.clamp(min=-space_bound, max=space_bound - self.voxel_size)
+        positions[:, 2] = positions[:, 2].clamp(min=0.0)
         voxel_indices = (
             torch.round(positions / self.voxel_size).int() + self.voxel_indices_offset
         )
+
         assert torch.all(voxel_indices >= 0) and torch.all(
-            voxel_indices < self.space_half_size * 2
+            voxel_indices < self.space_half_size * 2 + self.padding_size
         ), (
             f"[TorchOccupancySpace] position outside occupancy voxel space:\n"
             f"[TorchOccupancySpace] voxel space half size: {self.space_half_size}\n"  # noqa: E501
+            f"[TorchOccupancySpace] padding size: {self.padding_size}\n"  # noqa: E501
             f"[TorchOccupancySpace] voexl size: {self.voxel_size}\n"  # noqa: E501
+            f"[TorchOccupancySpace] voxel indices offset: {self.voxel_indices_offset}\n"  # noqa: E501
             f"voxel indices: {voxel_indices}\n"
             f"voxel positions: {positions}"
         )

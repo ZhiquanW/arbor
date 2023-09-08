@@ -30,12 +30,13 @@ def main():
     print("env action dim:", trainer_params.env.action_dim)
     print("policy", trainer_params.policy.actor)
     eva_env = copy.deepcopy(trainer_params.env)
-
     sub_steps = int(trainer_params.epochs // train_batch)
-    trainer.evaluate(1, eva_env)
-    for _ in range(train_batch):
+    for i in range(train_batch):
+        print("batch idx:", i)
         trainer.train(sub_steps)
-        ep_rtn, ep_mean = trainer.evaluate(10, env=eva_env)
+        ep_rtn, ep_mean = trainer.evaluate(
+            10,
+        )
         print("evalution: ep_rtn:", ep_rtn, "ep_mean:", ep_mean)
 
 

@@ -123,6 +123,10 @@ class TorchArborEngine:
         self.done: bool = False
         if self.occupancy_space is not None:
             self.occupancy_space.clear()
+        if self.shadow_space is not None:
+            self.shadow_space.clear()
+        if self.energy_module is not None:
+            self.energy_module.reset()
 
     def __reset_tree_variables(self) -> None:
         self.num_nodes: int = 1
@@ -258,6 +262,8 @@ class TorchArborEngine:
             )
         self.steps += 1
         if self.steps == self.max_steps:
+            self.done = True
+        if self.energy_module is not None and self.energy_module.total_energy <= 0:
             self.done = True
         return self.done
 
@@ -453,6 +459,8 @@ class TorchArborEngine:
         if self.energy_module is not None:
             energy_remained = self.energy_module.branch_consumption(num_new_branches)
         local_branch_idx = local_branch_idx[:num_new_branches]
+        if num_new_branches == 0:
+            return energy_remained
         new_nodes_rot_euler_normalized = self.__compute_branch_rot(
             local_branch_idx, nodes_prev_rot_mat[local_branch_idx]
         )
