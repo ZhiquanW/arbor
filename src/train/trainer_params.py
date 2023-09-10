@@ -27,12 +27,6 @@ class BranchProbEnvSpeedTestParams:
             arbor_engine=arbor.TorchArborEngine(
                 move_dis_range=[0.05, 0.1],
                 max_steps=20,
-                occupancy_space=aux_space.TorchOccupancySpace(
-                    space_half_size=50, device=device
-                ),
-                shadow_space=aux_space.TorchShadowSpace(
-                    space_half_size=50, device=device
-                ),
                 energy_module=energy_module.EnergyModule(),
                 device=device,
             )
@@ -47,12 +41,6 @@ class BranchProbEnvParams:
         env=env_fn(
             arbor_engine=arbor.TorchArborEngine(
                 max_steps=1000,
-                occupancy_space=aux_space.TorchOccupancySpace(
-                    space_half_size=50, device=device
-                ),
-                shadow_space=aux_space.TorchShadowSpace(
-                    space_half_size=50, device=device
-                ),
                 energy_module=energy_module.EnergyModule(),
                 device=device,
             )

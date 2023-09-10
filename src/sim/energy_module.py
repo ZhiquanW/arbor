@@ -8,12 +8,18 @@ class EnergyHist:
         self.reset()
 
     def reset(self) -> None:
-        self.total_energys: List[float] = []
-        self.energy_balance: List[float] = [0]
-        self.collected_energys: List[float] = []
-        self.maintainence_consumptions: List[float] = []
-        self.move_consumptions: List[float] = []
-        self.branch_consumptions: List[float] = []
+        self.reset_energy_info()
+        self.reset_tree_info()
+
+    def reset_energy_info(self) -> None:
+        self.accumulated_energies: List[float] = []
+        self.energy_balances: List[float] = []
+        self.collected_energies: List[float] = []
+        self.node_consumptions: List[float] = []
+
+    def reset_tree_info(self) -> None:
+        self.num_apical_nodes: List[int] = []
+        self.num_nodes: List[int] = []
 
 
 class EnergyModule:
@@ -21,96 +27,48 @@ class EnergyModule:
         self,
         init_energy: float = 10.0,
         max_energy: float = 100.0,
-        collection_voxel_half_size: int = 4,
-        init_collection_ratio: float = 0.8,
-        maintainence_consumption_factor: float = 0.1,
-        move_consumption_factor: float = 0.5,
-        branch_consumption_factor: float = 1.0,
+        collection_factor: float = 0.8,
+        node_consumption_factor: float = 0.5,
         record_history: bool = False,
     ) -> None:
         self.init_energy = init_energy
         self.max_energy: float = max_energy
-        self.collection_voxel_half_size = collection_voxel_half_size
-        self.init_collection_ratio: float = init_collection_ratio
-        self.maintainence_consumption_factor: float = maintainence_consumption_factor
-        self.move_consumption_factor: float = move_consumption_factor
-        self.branch_consumption_factor: float = branch_consumption_factor
-        self.total_energy: float = init_energy
+        self.collection_factor: float = collection_factor
+        self.node_consumption_factor: float = node_consumption_factor
+        self.accumulated_energy: float = init_energy
+        self.current_energy_balance: float = 0
         self.energy_hist: Optional[EnergyHist] = (
             EnergyHist() if record_history else None
         )
 
     def reset(self) -> None:
-        self.total_energy = self.init_energy
+        self.accumulated_energy = self.init_energy
+        self.current_energy_balance = 0
         if self.energy_hist is not None:
-            self.energy_hist.reset()
+            self.energy_hist.reset_energy_info()
 
-    def colelct_energy(
-        self, nodes_position: torch.Tensor, shadow_space: aux_space.TorchShadowSpace
+    def measure_energy(
+        self, num_apical_nodes: int, num_nodes: int, record_act: bool = True
     ) -> None:
-        node_voxels_idx = shadow_space.positions_to_voxels_idx(nodes_position)
-        energy_collection = 0
-        for voxel_index in node_voxels_idx:
-            energy_collection += torch.mean(
-                1
-                - shadow_space.space[
-                    voxel_index[0]
-                    - self.collection_voxel_half_size
-                    + 1 : voxel_index[0]
-                    + self.collection_voxel_half_size,
-                    voxel_index[1]
-                    - self.collection_voxel_half_size
-                    + 1 : voxel_index[1]
-                    + self.collection_voxel_half_size,
-                    voxel_index[2]
-                    - self.collection_voxel_half_size
-                    + 1 : voxel_index[2]
-                    + 1,
-                ]
-            ).item()
-        energy_fullfill_ratio = self.total_energy / self.max_energy
-        collection_ratio = self.init_collection_ratio * (1 - energy_fullfill_ratio)
-        collected_energy = collection_ratio * energy_collection
-        if self.energy_hist is not None:
-            self.energy_hist.collected_energys.append(collected_energy)
-            self.energy_hist.energy_balance[-1] += collected_energy
-            self.energy_hist.energy_balance.append(0)
-        self.total_energy += collected_energy
-        self.total_energy = min(self.max_energy, self.total_energy)
-        if self.energy_hist is not None:
-            self.energy_hist.total_energys.append(self.total_energy)
+        collected_energy = num_apical_nodes * self.collection_factor
+        node_consumption = num_nodes * self.node_consumption_factor
+        self.current_energy_balance = collected_energy - node_consumption
+        self.accumulated_energy += self.current_energy_balance
+        self.accumulated_energy = min(self.accumulated_energy, self.max_energy)
 
-    def maintainence_consumption(self, num_active_nodes: int) -> bool:
-        maintainence_consumption = (
-            self.maintainence_consumption_factor * num_active_nodes
-        )
         if self.energy_hist is not None:
-            self.energy_hist.maintainence_consumptions.append(maintainence_consumption)
-            self.energy_hist.energy_balance[-1] -= maintainence_consumption
-        self.total_energy -= maintainence_consumption
-        if self.total_energy < 0 and self.energy_hist is not None:
-            self.energy_hist.total_energys.append(self.total_energy)
-            return False
-        return True
+            self.energy_hist.accumulated_energies.append(self.accumulated_energy)
+            self.energy_hist.energy_balances.append(self.current_energy_balance)
+            self.energy_hist.collected_energies.append(collected_energy)
+            self.energy_hist.node_consumptions.append(node_consumption)
+            if record_act:
+                self.energy_hist.num_apical_nodes.append(num_apical_nodes)
+                self.energy_hist.num_nodes.append(num_nodes)
 
-    def move_consumption_consumption(self, distances: torch.Tensor) -> bool:
-        move_consumption = self.move_consumption_factor * torch.sum(distances).item()
-        self.total_energy -= move_consumption
+    def recompute_energy_hist(self) -> None:
         if self.energy_hist is not None:
-            self.energy_hist.move_consumptions.append(move_consumption)
-            self.energy_hist.energy_balance[-1] -= move_consumption
-        if self.total_energy < 0 and self.energy_hist is not None:
-            self.energy_hist.total_energys.append(self.total_energy)
-            return False
-        return True
-
-    def branch_consumption(self, num_new_branches: int) -> bool:
-        branch_consumption = self.branch_consumption_factor * num_new_branches
-        if self.energy_hist is not None:
-            self.energy_hist.branch_consumptions.append(branch_consumption)
-            self.energy_hist.energy_balance[-1] -= branch_consumption
-        self.total_energy -= branch_consumption
-        if self.total_energy < 0 and self.energy_hist is not None:
-            self.energy_hist.total_energys.append(self.total_energy)
-            return False
-        return True
+            self.reset()
+            for num_apical_nodes, num_nodes in zip(
+                self.energy_hist.num_apical_nodes, self.energy_hist.num_nodes
+            ):
+                self.measure_energy(num_apical_nodes, num_nodes, record_act=False)

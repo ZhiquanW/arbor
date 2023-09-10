@@ -76,7 +76,7 @@ class BranchProbArborEnv(BaseEnvTrait):
         assert (
             self.arbor_engine.energy_module is not None
         ), "BranchProbArborEnv must have energy module in arbor engine"
-        reward = self.arbor_engine.energy_module.total_energy / 100.0
+        reward = self.arbor_engine.energy_module.accumulated_energy / 100.0
         # print(f"step: {self.arbor_engine.steps} -  total energy:", reward)
         return (
             self.arbor_engine.nodes_state.flatten(),
