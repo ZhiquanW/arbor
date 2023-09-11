@@ -169,6 +169,8 @@ class TorchArborEngine:
     def reset(self):
         self.__reset_sim_vriable()
         self.__reset_tree_variables()
+        if self.energy_module is not None:
+            self.energy_module.reset()
 
     def __sample_action(self):
         return torch.rand(self.max_branches_num * 6, device=self.device) * 2 - 1

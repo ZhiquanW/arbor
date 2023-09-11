@@ -8,14 +8,14 @@ ARBOR_PROB_EPSILON = 0.001
 ARBOR_ANGLE_EPSILON = 1
 
 
-def max_steps_callback(self) -> None:
+def max_steps_callback() -> None:
     if "env_wrapper" in st.session_state:
         st.session_state["env_wrapper"].env.arbor_engine.max_steps = int(
             st.session_state["max_steps"]
         )
 
 
-def max_barnches_num_callbacks(self) -> None:
+def max_barnches_num_callbacks() -> None:
     if "env_wrapper" in st.session_state:
         st.session_state["env_wrapper"].env.arbor_engine.max_branches_num = int(
             st.session_state["max_branches_num"]

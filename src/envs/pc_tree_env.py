@@ -9,8 +9,6 @@ from matplotlib import axes
 import numpy as np
 from rlvortex.envs.base_env import BaseEnvTrait
 
-import core
-
 
 def load_pointcloud(file_path: str):
     data = PlyData.read(file_path)

@@ -31,3 +31,8 @@ bp-trainer:
 	@echo "start trail-bp-tree"
 	python src/train/bp_trainer.py
 	@echo "trail-bp-tree done"
+pc:
+	@echo "activate conda env"
+	$(CONDA_ACTIVATE) arbor
+	python src/point_cloud/pc_main.py
+	@echo "point-cloud done"
